@@ -103,7 +103,7 @@ export async function collectFingerprint(
   // 13. Performance
   updateProgress('Анализ Performance', 'Performance');
   const perfInfo = getPerformanceInfo();
-  const performance = {
+  const performanceData = {
     domContentLoaded: perfInfo.timing.domContentLoaded,
     loadComplete: perfInfo.timing.loadComplete,
     domInteractive: perfInfo.timing.domInteractive,
@@ -152,7 +152,7 @@ export async function collectFingerprint(
     battery,
     mediaQueries,
     storage,
-    performance,
+    performance: performanceData,
     misc,
     fpjs,
     timestamp: new Date().toISOString(),
@@ -174,7 +174,7 @@ export async function collectFingerprint(
     battery,
     mediaQueries,
     storage,
-    performance,
+    performance: performanceData,
     misc,
     fpjs,
     timestamp: new Date().toISOString(),
