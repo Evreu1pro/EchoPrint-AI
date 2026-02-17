@@ -129,9 +129,9 @@ export function safeSync<T>(fn: () => T, defaultValue: T): T {
 export async function measureTime<T>(
   fn: () => Promise<T>
 ): Promise<{ result: T; duration: number }> {
-  const start = performance.now();
+  const start = globalThis.performance.now();
   const result = await fn();
-  const duration = performance.now() - start;
+  const duration = globalThis.performance.now() - start;
   return { result, duration };
 }
 
