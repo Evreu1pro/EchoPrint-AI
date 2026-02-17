@@ -7,6 +7,13 @@ import type { FingerprintData, AnalysisResult, AIReport } from '../types';
 import { analyzeUniqueness, interpretUniquenessScore } from './uniqueness';
 import { analyzeConsistency, interpretConsistencyScore } from './consistency';
 import { analyzeAnomalies, interpretAnomalyScore } from './anomaly';
+import { detectDevice, type DeviceProfile } from '../fingerprint/device-detector';
+import { 
+  generateDeviceAwareAnalysis, 
+  type DeviceAwareAnalysis,
+  type DeviceRecommendation 
+} from './device-aware-recommendations';
+import { detectTargetTracking, type FullDetectionResult } from '../detection/target-detector';
 
 /**
  * Определяет уровень риска приватности
@@ -287,27 +294,71 @@ function generatePrivacyTips(
  * Основная функция анализа
  */
 export function analyzeFingerprint(data: FingerprintData): AnalysisResult {
+  // 1. Определение устройства
+  const deviceProfile = detectDevice(
+    data.navigator.userAgent,
+    data.navigator.platform,
+    data.navigator.vendor,
+    {
+      width: data.hardware.screen.width,
+      height: data.hardware.screen.height,
+      pixelRatio: data.hardware.screen.pixelRatio
+    },
+    data.hardware,
+    data.navigator
+  );
+
+  // 2. Device-aware анализ
+  const deviceAwareAnalysis = generateDeviceAwareAnalysis(data, deviceProfile);
+
+  // 3. Базовый анализ
   const uniqueness = analyzeUniqueness(data);
   const consistency = analyzeConsistency(data);
   const anomaly = analyzeAnomalies(data);
   
-  // Общий score - средневзвешенное
+  // 4. Target Detection
+  const targetDetection = detectTargetTracking(data);
+  
+  // 5. Общий score - средневзвешенное
   const overallScore = Math.round(
     uniqueness.overallScore * 0.4 +
     consistency.overallScore * 0.35 +
     anomaly.overallScore * 0.25
   );
   
-  const privacyRiskLevel = getPrivacyRiskLevel(
+  // 6. Privacy Risk Level (с учётом target detection)
+  let privacyRiskLevel = getPrivacyRiskLevel(
     uniqueness.overallScore,
     consistency.overallScore,
     anomaly.overallScore
   );
   
+  // Повышаем уровень риска если обнаружены критические трекеры
+  if (targetDetection.overallRisk === 'CRITICAL' || targetDetection.criticalTargets.length > 0) {
+    if (privacyRiskLevel !== 'very_high') {
+      privacyRiskLevel = privacyRiskLevel === 'very_low' ? 'medium' : 
+                         privacyRiskLevel === 'low' ? 'high' : 'very_high';
+    }
+  }
+  
+  // 7. Trackability Level
   const trackabilityLevel = getTrackabilityLevel(uniqueness.overallScore);
   
+  // 8. AI Report
   const aiReport = generateAIReport(data, uniqueness, consistency, anomaly);
   
+  // 9. Добавляем device-specific и target-specific рекомендации в AI report
+  const enhancedAiReport: AIReport = {
+    ...aiReport,
+    recommendations: [
+      ...deviceAwareAnalysis.recommendations.slice(0, 3).map((r: DeviceRecommendation) => 
+        `[${r.priority.toUpperCase()}] ${r.title}: ${r.description}${r.action ? ` ${r.action}` : ''}`
+      ),
+      ...targetDetection.results.slice(0, 2).flatMap(r => r.recommendations.slice(0, 2)),
+      ...aiReport.recommendations
+    ]
+  };
+
   return {
     uniqueness,
     consistency,
@@ -315,7 +366,16 @@ export function analyzeFingerprint(data: FingerprintData): AnalysisResult {
     overallScore,
     privacyRiskLevel,
     trackabilityLevel,
-    aiReport
+    aiReport: enhancedAiReport,
+    // Добавляем device profile
+    deviceProfile,
+    deviceAwareAnalysis,
+    // Добавляем target detection
+    targetDetection
+  } as AnalysisResult & { 
+    deviceProfile: DeviceProfile; 
+    deviceAwareAnalysis: DeviceAwareAnalysis;
+    targetDetection: FullDetectionResult;
   };
 }
 

@@ -46,7 +46,11 @@ export function useScanner(): UseScannerResult {
       setAnalysisResult(analysis);
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Произошла ошибка при сканировании');
+      console.error('Scanner error:', err);
+      const errorMessage = err instanceof Error 
+        ? err.message 
+        : 'Произошла ошибка при сканировании';
+      setError(errorMessage);
     } finally {
       setIsScanning(false);
     }

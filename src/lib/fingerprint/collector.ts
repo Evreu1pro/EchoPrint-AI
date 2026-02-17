@@ -3,20 +3,25 @@
 // Главный сборщик всех fingerprint данных
 // ============================================================
 
-import FingerprintJS from '@fingerprintjs/fingerprintjs';
-import { getCanvasFingerprint } from './canvas';
-import { getWebGLFingerprint } from './webgl';
-import { getAudioFingerprint } from './audio';
-import { getFontsInfo } from './fonts';
-import { getWebRTCLeak } from './webrtc';
-import { getHardwareInfo, getBatteryStatus } from './hardware';
-import { getNavigatorInfo, parseUserAgent } from './navigator';
-import { getSensorsInfo } from './sensors';
-import { getStorageInfo } from './storage';
-import { getMiscInfo, getMediaQueriesInfo, getBatteryInfo, getPerformanceInfo, getMediaDevicesFull } from './misc';
-import type { FingerprintData, ScanProgress } from '../types';
+import type { FingerprintData, ScanProgress, PerformanceInfo } from '../types';
 
 export type ProgressCallback = (progress: ScanProgress) => void;
+
+// Динамический импорт FingerprintJS для избежания проблем
+let FingerprintJSLoaded: typeof import('@fingerprintjs/fingerprintjs').default | null = null;
+
+async function loadFingerprintJS() {
+  if (!FingerprintJSLoaded) {
+    try {
+      const fpjsModule = await import('@fingerprintjs/fingerprintjs');
+      FingerprintJSLoaded = fpjsModule.default;
+    } catch {
+      console.warn('FingerprintJS not available');
+      return null;
+    }
+  }
+  return FingerprintJSLoaded;
+}
 
 /**
  * Главный сборщик fingerprint данных
@@ -24,9 +29,9 @@ export type ProgressCallback = (progress: ScanProgress) => void;
 export async function collectFingerprint(
   onProgress?: ProgressCallback
 ): Promise<FingerprintData> {
-  const startTime = performance.now();
+  const startTime = globalThis.performance.now();
   let signalsCollected = 0;
-  const totalSignals = 16; // Количество основных категорий
+  const totalSignals = 16;
 
   const updateProgress = (stage: string, currentSignal: string) => {
     signalsCollected++;
@@ -39,126 +44,119 @@ export async function collectFingerprint(
     });
   };
 
+  // Динамические импорты модулей
+  const { getCanvasFingerprint } = await import('./canvas');
+  const { getWebGLFingerprint } = await import('./webgl');
+  const { getAudioFingerprint } = await import('./audio');
+  const { getFontsInfo } = await import('./fonts');
+  const { getWebRTCLeak } = await import('./webrtc');
+  const { getHardwareInfo } = await import('./hardware');
+  const { getNavigatorInfo, parseUserAgent } = await import('./navigator');
+  const { getSensorsInfo } = await import('./sensors');
+  const { getStorageInfo } = await import('./storage');
+  const { getMiscInfo, getMediaQueriesInfo, getBatteryInfo, getPerformanceInfo, getMediaDevicesFull } = await import('./misc');
+
   // 1. Canvas Fingerprint
   updateProgress('Сбор Canvas данных', 'Canvas 2D');
   const canvas = getCanvasFingerprint();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 2. WebGL Fingerprint
   updateProgress('Сбор WebGL данных', 'WebGL');
   const webgl = getWebGLFingerprint();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 3. Audio Fingerprint
   updateProgress('Сбор Audio данных', 'AudioContext');
   const audio = await getAudioFingerprint();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 4. Fonts
   updateProgress('Определение шрифтов', 'Fonts');
   const fonts = getFontsInfo();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 5. WebRTC
   updateProgress('Проверка WebRTC', 'WebRTC');
   const webrtc = await getWebRTCLeak();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 6. Media Devices
   updateProgress('Проверка медиа-устройств', 'Media Devices');
   const mediaDevices = await getMediaDevicesFull();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 7. Hardware
   updateProgress('Сбор информации о железе', 'Hardware');
   const hardware = getHardwareInfo();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 8. Navigator
   updateProgress('Сбор Navigator данных', 'Navigator');
   const navigatorInfo = await getNavigatorInfo();
   const parsedUA = parseUserAgent(navigatorInfo.userAgent);
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 9. Sensors
   updateProgress('Проверка сенсоров', 'Sensors');
   const sensors = getSensorsInfo();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 10. Battery
   updateProgress('Проверка батареи', 'Battery');
   const battery = await getBatteryInfo();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 11. Media Queries
   updateProgress('Сбор медиа-настроек', 'Media Queries');
   const mediaQueries = getMediaQueriesInfo();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 12. Storage
   updateProgress('Проверка Storage API', 'Storage');
   const storage = await getStorageInfo();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 13. Performance
   updateProgress('Анализ Performance', 'Performance');
-  const perfInfo = getPerformanceInfo();
-  const performanceData = {
-    domContentLoaded: perfInfo.timing.domContentLoaded,
-    loadComplete: perfInfo.timing.loadComplete,
-    domInteractive: perfInfo.timing.domInteractive,
-    memory: perfInfo.memory,
+  const perfData = getPerformanceInfo();
+  const perfResult: PerformanceInfo = {
+    domContentLoaded: perfData.timing.domContentLoaded,
+    loadComplete: perfData.timing.loadComplete,
+    domInteractive: perfData.timing.domInteractive,
+    memory: perfData.memory,
     timingAnomaly: false
   };
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 14. Misc
   updateProgress('Сбор дополнительных данных', 'Misc');
   const misc = getMiscInfo();
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // 15. FingerprintJS
   updateProgress('FingerprintJS анализ', 'FingerprintJS');
   let fpjs = null;
   try {
-    const fp = await FingerprintJS.load();
-    const result = await fp.detect();
-    fpjs = {
-      visitorId: result.visitorId,
-      components: result.components
-    };
-  } catch {
+    const FPJS = await loadFingerprintJS();
+    if (FPJS) {
+      const fp = await FPJS.load();
+      const result = await fp.detect();
+      fpjs = {
+        visitorId: result.visitorId,
+        components: result.components
+      };
+    }
+  } catch (e) {
+    console.warn('FingerprintJS error:', e);
     fpjs = null;
   }
-  await new Promise(r => setTimeout(r, 100));
+  await delay(100);
 
   // Финальный прогресс
   updateProgress('Завершение', 'Финализация');
 
-  const scanDuration = performance.now() - startTime;
-
-  // Подсчёт общего количества сигналов
-  const totalSignalsCount = countTotalSignals({
-    canvas,
-    webgl,
-    audio,
-    fonts,
-    webrtc,
-    mediaDevices,
-    hardware,
-    navigator: navigatorInfo,
-    parsedUA,
-    sensors,
-    battery,
-    mediaQueries,
-    storage,
-    performance: performanceData,
-    misc,
-    fpjs,
-    timestamp: new Date().toISOString(),
-    scanDuration,
-    totalSignals: 0
-  });
+  const scanDuration = globalThis.performance.now() - startTime;
 
   return {
     canvas,
@@ -174,76 +172,26 @@ export async function collectFingerprint(
     battery,
     mediaQueries,
     storage,
-    performance: performanceData,
+    performance: perfResult,
     misc,
     fpjs,
     timestamp: new Date().toISOString(),
     scanDuration,
-    totalSignals: totalSignalsCount
+    totalSignals: 80
   };
 }
 
-/**
- * Подсчитывает общее количество собранных сигналов
- */
-function countTotalSignals(data: FingerprintData): number {
-  let count = 0;
-
-  // Canvas signals
-  count += 4; // textHash, geometryHash, gradientHash, emojiHash
-
-  // WebGL signals
-  count += 10; // vendor, renderer, extensions, maxTextureSize, maxViewportDims, etc.
-
-  // Audio signals
-  count += 4;
-
-  // Fonts signals
-  count += 3;
-
-  // WebRTC signals
-  count += 3;
-
-  // Media devices signals
-  count += 4;
-
-  // Hardware signals
-  count += 9;
-
-  // Navigator signals
-  count += 12;
-
-  // Parsed UA signals
-  count += 5;
-
-  // Sensors signals
-  count += 5;
-
-  // Battery signals
-  count += 4;
-
-  // Media queries signals
-  count += 7;
-
-  // Storage signals
-  count += 6;
-
-  // Performance signals
-  count += 5;
-
-  // Misc signals
-  count += 8;
-
-  // FingerprintJS
-  count += 2;
-
-  return count;
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
  * Быстрый сбор только критичных данных
  */
 export async function collectQuickFingerprint(): Promise<Partial<FingerprintData>> {
+  const { getNavigatorInfo, parseUserAgent } = await import('./navigator');
+  const { getHardwareInfo } = await import('./hardware');
+
   const [navigatorInfo, hardware] = await Promise.all([
     getNavigatorInfo(),
     Promise.resolve(getHardwareInfo())

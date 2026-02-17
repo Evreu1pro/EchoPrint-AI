@@ -10,6 +10,8 @@ import { ScoreCard, BigScoreCard } from '@/components/scanner/ScoreCard';
 import { AIReportDisplay } from '@/components/scanner/AIReport';
 import { CategorySection } from '@/components/scanner/ParameterCard';
 import { ExportButton } from '@/components/scanner/ExportButton';
+import { DeviceBadge, DeviceInfoCard } from '@/components/scanner/DeviceBadge';
+import { TargetDetectionDisplay, TargetDetectionSummary } from '@/components/scanner/TargetDetectionDisplay';
 import { useScanner } from '@/hooks/useScanner';
 import { fingerprintToCategories } from '@/lib/utils/display';
 import { 
@@ -18,7 +20,10 @@ import {
   Eye, 
   AlertTriangle,
   CheckCircle2,
-  ArrowDown
+  ArrowDown,
+  Smartphone,
+  AlertCircle,
+  Target
 } from 'lucide-react';
 
 export default function Home() {
@@ -146,6 +151,13 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Device Badge */}
+            {analysisResult.deviceProfile && (
+              <div className="flex justify-center">
+                <DeviceBadge profile={analysisResult.deviceProfile} />
+              </div>
+            )}
+
             {/* Main Scores */}
             <div className="grid md:grid-cols-3 gap-4">
               <ScoreCard
@@ -178,6 +190,31 @@ export default function Home() {
                 level={analysisResult.anomaly.overallScore >= 80 ? "Норма" : analysisResult.anomaly.overallScore >= 60 ? "Есть вопросы" : "Подозрительно"}
               />
             </div>
+
+            {/* Device Info & Warnings */}
+            {analysisResult.deviceProfile && (
+              <div className="grid md:grid-cols-2 gap-4">
+                <DeviceInfoCard profile={analysisResult.deviceProfile} />
+                
+                {analysisResult.deviceAwareAnalysis?.deviceSpecificWarnings && 
+                 analysisResult.deviceAwareAnalysis.deviceSpecificWarnings.length > 0 && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6">
+                    <div className="flex items-center gap-2 text-red-400 mb-4">
+                      <AlertCircle className="w-5 h-5" />
+                      <h3 className="font-semibold">Предупреждения</h3>
+                    </div>
+                    <ul className="space-y-2">
+                      {analysisResult.deviceAwareAnalysis.deviceSpecificWarnings.map((warning, i) => (
+                        <li key={i} className="text-sm text-red-300 flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                          <span>{warning}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Big Scores */}
             <div className="grid md:grid-cols-2 gap-4">
@@ -214,6 +251,17 @@ export default function Home() {
 
             {/* AI Report */}
             <AIReportDisplay report={analysisResult.aiReport} />
+
+            {/* Target Detection */}
+            {analysisResult.targetDetection && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Target className="w-5 h-5 text-primary" />
+                  <h3 className="text-xl font-semibold">Анализ трекеров</h3>
+                </div>
+                <TargetDetectionDisplay result={analysisResult.targetDetection} />
+              </div>
+            )}
 
             {/* Detailed Parameters */}
             <div className="space-y-4">
