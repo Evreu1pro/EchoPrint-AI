@@ -138,7 +138,7 @@ function isFontInstalled(
  * Основная функция определения шрифтов
  */
 export function getFontsInfo(): FontsInfo {
-  const startTime = performance.now();
+  const startTime = globalThis.performance.now();
   
   const supported = safeSync(() => {
     const canvas = document.createElement('canvas');
@@ -173,7 +173,7 @@ export function getFontsInfo(): FontsInfo {
     }
   }
 
-  const detectionTime = performance.now() - startTime;
+  const detectionTime = globalThis.performance.now() - startTime;
 
   return {
     available,

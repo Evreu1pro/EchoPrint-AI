@@ -223,7 +223,7 @@ export function getPerformanceInfo(): {
   let domInteractive: number | null = null;
 
   try {
-    const entries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+    const entries = globalThis.performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
     if (entries.length > 0) {
       const timing = entries[0];
       domContentLoaded = timing.domContentLoadedEventEnd - timing.domContentLoadedEventStart;
@@ -238,12 +238,13 @@ export function getPerformanceInfo(): {
   let memory: { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number } | null = null;
   try {
     // @ts-expect-error - memory API
-    if (performance.memory) {
+    if ((globalThis.performance as Record<string, unknown>).memory) {
       // @ts-expect-error - memory API
+      const perfMemory = (globalThis.performance as Record<string, Record<string, number>>).memory;
       memory = {
-        usedJSHeapSize: performance.memory.usedJSHeapSize,
-        totalJSHeapSize: performance.memory.totalJSHeapSize,
-        jsHeapSizeLimit: performance.memory.jsHeapSizeLimit
+        usedJSHeapSize: perfMemory.usedJSHeapSize,
+        totalJSHeapSize: perfMemory.totalJSHeapSize,
+        jsHeapSizeLimit: perfMemory.jsHeapSizeLimit
       };
     }
   } catch {
@@ -267,19 +268,19 @@ export function detectTimingAnomalies(): {
 
   // Проверка timestamp
   const now = Date.now();
-  const perfNow = performance.now();
-  const diff = Math.abs(now - perfNow - performance.timeOrigin);
+  const perfNow = globalThis.performance.now();
+  const diff = Math.abs(now - perfNow - globalThis.performance.timeOrigin);
   
   if (diff > 1000) {
     indicators.push('Timestamp discrepancy detected');
   }
 
   // Проверка скорости выполнения
-  const start = performance.now();
+  const start = globalThis.performance.now();
   for (let i = 0; i < 1000000; i++) {
     Math.random();
   }
-  const duration = performance.now() - start;
+  const duration = globalThis.performance.now() - start;
   
   // Если очень быстро - возможна виртуализация
   if (duration < 10) {
