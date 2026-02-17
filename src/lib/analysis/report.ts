@@ -8,10 +8,10 @@ import { analyzeUniqueness, interpretUniquenessScore } from './uniqueness';
 import { analyzeConsistency, interpretConsistencyScore } from './consistency';
 import { analyzeAnomalies, interpretAnomalyScore } from './anomaly';
 import { detectDevice, type DeviceProfile } from '../fingerprint/device-detector';
-import { 
-  generateDeviceAwareAnalysis, 
+import {
+  generateDeviceAwareAnalysis,
   type DeviceAwareAnalysis,
-  type DeviceRecommendation 
+  type DeviceRecommendation
 } from './device-aware-recommendations';
 import { detectTargetTracking, type FullDetectionResult } from '../detection/target-detector';
 
@@ -26,27 +26,27 @@ function getPrivacyRiskLevel(
   // Высокая уникальность = высокий риск отслеживания
   // Низкая согласованность = использование privacy инструментов
   // Аномалии = могут означать защиту или проблемы
-  
+
   // Если высокая уникальность и хорошая согласованность - высокий риск
   if (uniquenessScore >= 80 && consistencyScore >= 80) {
     return 'very_high';
   }
-  
+
   // Если средняя уникальность - средний риск
   if (uniquenessScore >= 60 && consistencyScore >= 70) {
     return 'high';
   }
-  
+
   // Если низкая уникальность или много аномалий (privacy tools) - низкий риск
   if (uniquenessScore < 40 || anomalyScore < 60) {
     return 'low';
   }
-  
+
   // Если очень низкая уникальность - очень низкий риск
   if (uniquenessScore < 25) {
     return 'very_low';
   }
-  
+
   return 'medium';
 }
 
@@ -73,10 +73,10 @@ function generateAIReport(
   const uniquenessInterpret = interpretUniquenessScore(uniqueness.overallScore);
   const consistencyInterpret = interpretConsistencyScore(consistency.overallScore);
   const anomalyInterpret = interpretAnomalyScore(anomaly.overallScore);
-  
+
   // Summary
   let summary = `Ваше устройство "${data.parsedUA.browser.name} ${data.parsedUA.browser.version}" на ${data.parsedUA.os.name} `;
-  
+
   if (uniqueness.overallScore >= 80) {
     summary += 'имеет очень уникальный цифровой отпечаток. ';
   } else if (uniqueness.overallScore >= 60) {
@@ -84,32 +84,32 @@ function generateAIReport(
   } else {
     summary += 'имеет распространённый цифровой отпечаток. ';
   }
-  
+
   summary += `Уровень уникальности: ${uniqueness.overallScore}%. `;
   summary += `Согласованность параметров: ${consistency.overallScore}%.`;
-  
+
   // Uniqueness assessment
   let uniquenessAssessment = `${uniquenessInterpret.level}. `;
   uniquenessAssessment += uniquenessInterpret.description + ' ';
-  
+
   if (uniqueness.rarestSignals.length > 0) {
     const rarest = uniqueness.rarestSignals[0];
     uniquenessAssessment += `Наиболее редкая характеристика: ${formatSignalName(rarest.signal)} (редкость: ${rarest.rarity}%). `;
   }
-  
+
   if (uniqueness.commonSignals.length > 0) {
     const common = uniqueness.commonSignals[0];
     uniquenessAssessment += `Наиболее распространённая: ${formatSignalName(common.signal)} (редкость: ${common.rarity}%).`;
   }
-  
+
   // Consistency assessment
   let consistencyAssessment = `${consistencyInterpret.level}. `;
   consistencyAssessment += consistencyInterpret.description + ' ';
-  
+
   const failedRules = consistency.rules.filter(r => !r.passed);
   if (failedRules.length > 0) {
     consistencyAssessment += `Обнаружено ${failedRules.length} несоответствий. `;
-    
+
     const criticalIssues = failedRules.filter(r => r.severity === 'critical' || r.severity === 'high');
     if (criticalIssues.length > 0) {
       consistencyAssessment += `Критичные: ${criticalIssues.map(r => r.name).join(', ')}.`;
@@ -117,17 +117,17 @@ function generateAIReport(
   } else {
     consistencyAssessment += 'Все параметры согласованы и логичны.';
   }
-  
+
   // Anomaly assessment
   let anomalyAssessment = `${anomalyInterpret.level}. `;
   anomalyAssessment += anomalyInterpret.description + ' ';
-  
+
   if (anomaly.detectedAnomalies.length > 0) {
     const groupedByType = anomaly.detectedAnomalies.reduce((acc, a) => {
       acc[a.type] = (acc[a.type] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-    
+
     if (groupedByType['virtualization']) {
       anomalyAssessment += `Признаки виртуализации: ${groupedByType['virtualization']}. `;
     }
@@ -138,13 +138,13 @@ function generateAIReport(
       anomalyAssessment += `Признаки модификации: ${groupedByType['modification']}. `;
     }
   }
-  
+
   // Recommendations
   const recommendations = generateRecommendations(data, uniqueness, consistency, anomaly);
-  
+
   // Privacy tips
   const privacyTips = generatePrivacyTips(data, uniqueness, consistency, anomaly);
-  
+
   return {
     summary,
     uniquenessAssessment,
@@ -183,7 +183,7 @@ function formatSignalName(signal: string): string {
     'cameras': 'Камеры',
     'fpjs_visitor_id': 'FingerprintJS ID'
   };
-  
+
   return names[signal] || signal;
 }
 
@@ -197,7 +197,7 @@ function generateRecommendations(
   anomaly: ReturnType<typeof analyzeAnomalies>
 ): string[] {
   const recommendations: string[] = [];
-  
+
   // На основе уникальности
   if (uniqueness.overallScore >= 80) {
     recommendations.push('Ваше устройство очень уникально. Для повышения приватности рассмотрите использование браузера с anti-fingerprinting.');
@@ -206,45 +206,45 @@ function generateRecommendations(
     recommendations.push('Ваше устройство похоже на многие другие. Это хорошо для приватности.');
     recommendations.push('Если нужна большая уникальность (например, для тестирования), установите дополнительные шрифты.');
   }
-  
+
   // На основе согласованности
   const failedCritical = consistency.rules.filter(r => !r.passed && r.severity === 'critical');
   if (failedCritical.length > 0) {
     recommendations.push('Критичные несоответствия в fingerprint могут вызывать проблемы на некоторых сайтах. Проверьте настройки браузера.');
   }
-  
+
   // На основе аномалий
   if (anomaly.virtualizationProbability > 0.5) {
     recommendations.push('Обнаружены признаки виртуализации. Если вы используете VM, это нормально.');
   }
-  
+
   if (anomaly.automationProbability > 0.5) {
     recommendations.push('Обнаружены признаки автоматизации. Это может блокировать некоторые сайты.');
   }
-  
+
   // Браузер-специфичные рекомендации
   if (data.parsedUA.browser.name === 'Chrome') {
     recommendations.push('Chrome предоставляет много fingerprint-данных. Рассмотрите Firefox или Brave для лучшей приватности.');
   }
-  
+
   if (data.parsedUA.browser.name === 'Firefox') {
     recommendations.push('Firefox имеет встроенную защиту от fingerprinting. Включите Resist Fingerprinting в about:config для максимальной защиты.');
   }
-  
+
   if (data.parsedUA.browser.name === 'Brave') {
     recommendations.push('Brave имеет отличную встроенную защиту от fingerprinting. Ваша приватность на высоком уровне.');
   }
-  
+
   // WebRTC leak
   if (data.webrtc.localIPs.length > 0) {
     recommendations.push('WebRTC утечка IP: рассмотрите установку расширения для блокировки WebRTC или отключение в настройках браузера.');
   }
-  
+
   // Количество шрифтов
   if (data.fonts.count > 200) {
     recommendations.push('Большое количество шрифтов увеличивает уникальность. Для приватности используйте стандартный набор.');
   }
-  
+
   return recommendations.slice(0, 6); // Максимум 6 рекомендаций
 }
 
@@ -258,35 +258,35 @@ function generatePrivacyTips(
   anomaly: ReturnType<typeof analyzeAnomalies>
 ): string[] {
   const tips: string[] = [];
-  
+
   // Общие советы
   tips.push('Регулярно обновляйте браузер - новые версии часто улучшают защиту.');
   tips.push('Используйте приватный режим для чувствительного просмотра.');
-  
+
   // На основе текущего состояния
   if (uniqueness.overallScore > 70) {
     tips.push('Установите расширение для randomization fingerprint (например, Canvas Defender).');
   }
-  
+
   if (data.webrtc.localIPs.length > 0) {
     tips.push('Используйте VPN с защитой от WebRTC утечек.');
   }
-  
+
   // Браузер-специфичные советы
   if (data.parsedUA.browser.name === 'Firefox') {
     tips.push('В about:config установите privacy.resistFingerprinting = true для максимальной защиты.');
     tips.push('Установите extensions.pocket.enabled = false для уменьшения fingerprint.');
   }
-  
+
   if (data.parsedUA.browser.name === 'Chrome') {
     tips.push('Рассмотрите переход на Brave или Firefox для лучшей приватности.');
     tips.push('Установите расширение uBlock Origin для блокировки трекеров.');
   }
-  
+
   // Для продвинутых пользователей
   tips.push('Используйте Tor Browser для анонимного просмотра (максимальная защита).');
   tips.push('Рассмотрите использование контейнеров (Firefox) для изоляции сайтов.');
-  
+
   return tips.slice(0, 5); // Максимум 5 советов
 }
 
@@ -315,43 +315,43 @@ export function analyzeFingerprint(data: FingerprintData): AnalysisResult {
   const uniqueness = analyzeUniqueness(data);
   const consistency = analyzeConsistency(data);
   const anomaly = analyzeAnomalies(data);
-  
+
   // 4. Target Detection
   const targetDetection = detectTargetTracking(data);
-  
+
   // 5. Общий score - средневзвешенное
   const overallScore = Math.round(
     uniqueness.overallScore * 0.4 +
     consistency.overallScore * 0.35 +
     anomaly.overallScore * 0.25
   );
-  
+
   // 6. Privacy Risk Level (с учётом target detection)
   let privacyRiskLevel = getPrivacyRiskLevel(
     uniqueness.overallScore,
     consistency.overallScore,
     anomaly.overallScore
   );
-  
+
   // Повышаем уровень риска если обнаружены критические трекеры
   if (targetDetection.overallRisk === 'CRITICAL' || targetDetection.criticalTargets.length > 0) {
     if (privacyRiskLevel !== 'very_high') {
-      privacyRiskLevel = privacyRiskLevel === 'very_low' ? 'medium' : 
-                         privacyRiskLevel === 'low' ? 'high' : 'very_high';
+      privacyRiskLevel = privacyRiskLevel === 'very_low' ? 'medium' :
+        privacyRiskLevel === 'low' ? 'high' : 'very_high';
     }
   }
-  
+
   // 7. Trackability Level
   const trackabilityLevel = getTrackabilityLevel(uniqueness.overallScore);
-  
+
   // 8. AI Report
   const aiReport = generateAIReport(data, uniqueness, consistency, anomaly);
-  
+
   // 9. Добавляем device-specific и target-specific рекомендации в AI report
   const enhancedAiReport: AIReport = {
     ...aiReport,
     recommendations: [
-      ...deviceAwareAnalysis.recommendations.slice(0, 3).map((r: DeviceRecommendation) => 
+      ...deviceAwareAnalysis.recommendations.slice(0, 3).map((r: DeviceRecommendation) =>
         `[${r.priority.toUpperCase()}] ${r.title}: ${r.description}${r.action ? ` ${r.action}` : ''}`
       ),
       ...targetDetection.results.slice(0, 2).flatMap(r => r.recommendations.slice(0, 2)),
@@ -372,8 +372,8 @@ export function analyzeFingerprint(data: FingerprintData): AnalysisResult {
     deviceAwareAnalysis,
     // Добавляем target detection
     targetDetection
-  } as AnalysisResult & { 
-    deviceProfile: DeviceProfile; 
+  } as AnalysisResult & {
+    deviceProfile: DeviceProfile;
     deviceAwareAnalysis: DeviceAwareAnalysis;
     targetDetection: FullDetectionResult;
   };
@@ -390,6 +390,6 @@ export function getRiskLevelDescription(level: string): string {
     'high': 'Высокий риск - вас легко идентифицировать',
     'very_high': 'Очень высокий риск - ваше устройство уникально и легко отслеживается'
   };
-  
+
   return descriptions[level] || 'Неизвестный уровень';
 }
