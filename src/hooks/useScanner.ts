@@ -41,10 +41,18 @@ export function useScanner(): UseScannerResult {
 
       setProgress({
         stage: 'Integrity multi-sample',
-        progress: 92,
+        progress: 85,
         currentSignal: 'Canvas / Audio stability',
-        signalsCollected: 15,
-        totalSignals: 16,
+        signalsCollected: 14,
+        totalSignals: 18,
+      });
+
+      setProgress({
+        stage: 'Ads & deep tracking probes',
+        progress: 92,
+        currentSignal: 'Privacy Sandbox + tracker scripts',
+        signalsCollected: 16,
+        totalSignals: 18,
       });
 
       const analysis = await analyzeFingerprint(data);

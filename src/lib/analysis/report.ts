@@ -1,5 +1,6 @@
 // ============================================================
-// EchoPrint AI v2 — Analysis orchestrator + report (EN primary)
+// EchoPrint AI v2.1 — Analysis orchestrator + report
+// Weights tracking surface heavily (stock Chrome ≠ hardened)
 // ============================================================
 
 import type { FingerprintData, AnalysisResult, AIReport } from '../types';
@@ -17,13 +18,17 @@ import {
   collectPageArtifacts,
   type ExposureReport,
 } from '../engine/exposure';
+import {
+  analyzeTrackingPosture,
+  type TrackingPostureReport,
+} from '../engine/tracking-posture';
 
 export type FullAnalysisResult = AnalysisResult & {
   deviceProfile: DeviceProfile;
   deviceAwareAnalysis: DeviceAwareAnalysis;
   integrity: IntegrityReport;
   exposure: ExposureReport;
-  /** @deprecated use exposure — kept for UI compatibility */
+  tracking: TrackingPostureReport;
   targetDetection: {
     results: never[];
     overallRisk: ExposureReport['overallRisk'];
@@ -36,28 +41,29 @@ export type FullAnalysisResult = AnalysisResult & {
 
 function getPrivacyRiskLevel(
   uniquenessScore: number,
-  consistencyScore: number,
-  integrityScore: number,
-  exposureScore: number
+  trackingSurface: number,
+  protectionScore: number
 ): 'very_low' | 'low' | 'medium' | 'high' | 'very_high' {
-  // High uniqueness + high integrity (native) = easy to track
-  // Low integrity may mean spoof/privacy tools (harder passive tracking, but detectable)
-  const trackEase = uniquenessScore * 0.45 + (100 - exposureScore) * -0.1 + integrityScore * 0.15;
-  const risk = uniquenessScore * 0.5 + exposureScore * 0.35 + (100 - consistencyScore) * 0.15;
+  // Tracking surface dominates: stock Chrome with common fingerprint is still HIGH risk
+  const risk = trackingSurface * 0.55 + uniquenessScore * 0.3 + (100 - protectionScore) * 0.15;
 
-  if (risk >= 75 && uniquenessScore >= 70) return 'very_high';
-  if (risk >= 60) return 'high';
-  if (risk >= 40) return 'medium';
-  if (risk >= 25) return 'low';
-  void trackEase;
+  if (risk >= 72) return 'very_high';
+  if (risk >= 55) return 'high';
+  if (risk >= 38) return 'medium';
+  if (risk >= 22) return 'low';
   return 'very_low';
 }
 
-function getTrackabilityLevel(uniquenessScore: number): 'very_low' | 'low' | 'medium' | 'high' | 'very_high' {
-  if (uniquenessScore >= 85) return 'very_high';
-  if (uniquenessScore >= 70) return 'high';
-  if (uniquenessScore >= 50) return 'medium';
-  if (uniquenessScore >= 30) return 'low';
+function getTrackabilityLevel(
+  uniquenessScore: number,
+  trackingSurface: number
+): 'very_low' | 'low' | 'medium' | 'high' | 'very_high' {
+  // Blend: common but wide-open Chrome is still highly trackable via ads graph
+  const t = uniquenessScore * 0.4 + trackingSurface * 0.6;
+  if (t >= 75) return 'very_high';
+  if (t >= 58) return 'high';
+  if (t >= 40) return 'medium';
+  if (t >= 25) return 'low';
   return 'very_low';
 }
 
@@ -71,22 +77,25 @@ function generateAIReport(
   consistency: ReturnType<typeof analyzeConsistency>,
   anomaly: ReturnType<typeof analyzeAnomalies>,
   integrity: IntegrityReport,
-  exposure: ExposureReport
+  exposure: ExposureReport,
+  tracking: TrackingPostureReport
 ): AIReport {
   const u = interpretUniquenessScore(uniqueness.overallScore);
   const c = interpretConsistencyScore(consistency.overallScore);
   const a = interpretAnomalyScore(anomaly.overallScore);
 
   let summary = `${data.parsedUA.browser.name} ${data.parsedUA.browser.version} on ${data.parsedUA.os.name}. `;
-  summary += `Uniqueness ${uniqueness.overallScore}/100 (${u.level}). `;
-  summary += `Integrity ${integrity.score}/100 — ${integrity.summary} `;
-  summary += `Exposure risk ${exposure.exposureScore}/100 (${exposure.overallRisk}).`;
+  summary += `Protection: ${tracking.protectionLevel} (${tracking.protectionScore}/100). `;
+  summary += `Ad/tracking surface: ${tracking.trackingSurfaceScore}/100. `;
+  summary += `Uniqueness ${uniqueness.overallScore}/100 — note: a “common” Chrome can still overshare to ads. `;
+  summary += tracking.vsStockChrome;
 
   let uniquenessAssessment = `${u.level}. ${u.description} `;
   if (uniqueness.rarestSignals[0]) {
     uniquenessAssessment += `Rarest signal: ${formatSignalName(uniqueness.rarestSignals[0].signal)} (rarity ${uniqueness.rarestSignals[0].rarity}%). `;
   }
-  uniquenessAssessment += `Population sketch: ${u.populationEstimate}.`;
+  uniquenessAssessment +=
+    'Uniqueness alone is not privacy: stock Chrome often looks common yet exposes Topics, CH, WebGL, and more.';
 
   let consistencyAssessment = `${c.level}. ${c.description} `;
   const failed = consistency.rules.filter((r) => !r.passed);
@@ -101,22 +110,25 @@ function generateAIReport(
   }
 
   let anomalyAssessment = `${a.level}. ${a.description} `;
-  if (integrity.findings.length) {
-    anomalyAssessment += `Integrity findings: ${integrity.findings
-      .slice(0, 3)
-      .map((f) => f.title)
-      .join('; ')}.`;
-  }
+  anomalyAssessment += ` ${tracking.summary}`;
   if (!integrity.canvasStable) {
     anomalyAssessment += ' Canvas hashes unstable across samples (noise injection).';
   }
 
-  const recommendations = [
-    ...exposure.recommendations,
-    ...generateRecommendations(data, uniqueness, consistency, anomaly, integrity),
-  ].slice(0, 8);
+  const openCritical = tracking.adApis.filter(
+    (p) => p.status === 'open' && p.severity === 'critical'
+  );
+  if (openCritical.length) {
+    anomalyAssessment += ` Open critical surfaces: ${openCritical.map((p) => p.name).join(', ')}.`;
+  }
 
-  const privacyTips = generatePrivacyTips(data, uniqueness, integrity, exposure);
+  const recommendations = [
+    ...tracking.recommendations,
+    ...exposure.recommendations.slice(0, 2),
+    ...generateRecommendations(data, uniqueness, consistency, anomaly, integrity, tracking),
+  ].slice(0, 10);
+
+  const privacyTips = generatePrivacyTips(data, uniqueness, integrity, exposure, tracking);
 
   return {
     summary,
@@ -133,35 +145,40 @@ function generateRecommendations(
   uniqueness: ReturnType<typeof analyzeUniqueness>,
   consistency: ReturnType<typeof analyzeConsistency>,
   anomaly: ReturnType<typeof analyzeAnomalies>,
-  integrity: IntegrityReport
+  integrity: IntegrityReport,
+  tracking: TrackingPostureReport
 ): string[] {
   const out: string[] = [];
 
+  if (tracking.browserProfile === 'stock_chrome' && tracking.protectionScore < 45) {
+    out.push(
+      'This looks like stock Chrome (wide ad + fingerprint surface). Max browser protection elsewhere should score higher protection and block more tracker scripts.'
+    );
+  }
+  if (tracking.blockedNetworkCount === 0 && tracking.networkProbes.length > 0) {
+    out.push('Tracker scripts loaded successfully — no effective ad-block/ETP on this profile.');
+  }
+  if (tracking.blockedNetworkCount >= 3) {
+    out.push(
+      `${tracking.blockedNetworkCount} major tracker endpoints blocked — good network layer protection.`
+    );
+  }
   if (uniqueness.overallScore >= 80) {
-    out.push('Your fingerprint is highly unique — use a privacy-focused browser or reduce custom fonts/plugins.');
+    out.push('Fingerprint is highly unique — privacy browser or fewer fonts helps.');
   }
   if (integrity.spoofProbability > 0.45) {
-    out.push('Integrity engine sees spoof/anti-detect signals. Sites may flag you even if uniqueness is low.');
-  }
-  if (integrity.privacyToolProbability > 0.4) {
-    out.push('Privacy hardening detected — good for anonymity; some sites may show CAPTCHAs.');
+    out.push('Spoof/anti-detect signals present — sites may challenge you.');
   }
   if (anomaly.automationProbability > 0.5 || data.navigator.webdriver) {
-    out.push('Automation markers present — expect bot challenges on protected sites.');
+    out.push('Automation markers present.');
   }
   if (data.webrtc.localIPs.length > 0 || data.webrtc.publicIP) {
-    out.push('WebRTC exposed IP candidates — enable WebRTC protection in browser or VPN.');
-  }
-  if (data.fonts.count > 120) {
-    out.push('Large installed font set increases desktop uniqueness.');
+    out.push('WebRTC IP candidates observed — enable WebRTC protection.');
   }
   if (consistency.criticalIssues?.length) {
-    out.push('Critical consistency failures often mean UA spoofing without matching GPU/touch.');
+    out.push('Critical consistency failures often mean incomplete spoofing.');
   }
-  if (data.parsedUA.browser.name === 'Chrome') {
-    out.push('Chromium exposes rich Client Hints + WebGL — consider Firefox, Brave, or Mullvad Browser for lower surface.');
-  }
-
+  void integrity;
   return out;
 }
 
@@ -169,31 +186,35 @@ function generatePrivacyTips(
   data: FingerprintData,
   uniqueness: ReturnType<typeof analyzeUniqueness>,
   integrity: IntegrityReport,
-  exposure: ExposureReport
+  exposure: ExposureReport,
+  tracking: TrackingPostureReport
 ): string[] {
   const tips = [
-    'Prefer strict tracking protection and total cookie protection (or site containers).',
-    'Keep language, timezone, and VPN region aligned to avoid looking spoofed.',
-    'Update the browser regularly — fingerprint mitigations improve over time.',
+    'Compare scans: stock Chrome vs Firefox Strict / Brave should differ mainly in Tracking surface & blocked scripts — not only uniqueness.',
+    'Enable strict tracking protection + uBlock Origin (or Brave shields).',
+    'Keep language, timezone, and VPN region aligned.',
   ];
-  if (uniqueness.overallScore > 65) {
-    tips.push('Avoid rare screen scales and custom fonts if you want to blend in.');
+  if (tracking.trackingSurfaceScore > 55) {
+    tips.push('Disable ad privacy / Privacy Sandbox features in browser settings when possible.');
   }
   if (exposure.exposedCount > 8) {
-    tips.push('Many fingerprint APIs are available — a hardened browser reduces the set at once.');
+    tips.push('Many fingerprint APIs are open — a hardened browser closes several at once.');
   }
   if (!integrity.canvasStable) {
-    tips.push('Canvas noise can help against static IDs but itself is a detectable signal.');
+    tips.push('Canvas noise is detectable; prefer browsers that standardize rendering.');
   }
   if (data.parsedUA.browser.name === 'Firefox') {
-    tips.push('Firefox: privacy.resistFingerprinting and letterboxing reduce cross-site linkability.');
+    tips.push('Firefox: ETP Strict + resistFingerprinting + letterboxing.');
   }
-  tips.push('Tor Browser remains the gold standard for anonymity (slower, some site breakage).');
-  return tips.slice(0, 6);
+  if (uniqueness.overallScore > 65) {
+    tips.push('Rare fonts/screens increase uniqueness on top of ad tracking.');
+  }
+  tips.push('Tor Browser for strongest anonymity (trade-offs on speed and compatibility).');
+  return tips.slice(0, 7);
 }
 
 /**
- * Full async analysis (integrity needs multi-sample delays)
+ * Full async analysis
  */
 export async function analyzeFingerprint(data: FingerprintData): Promise<FullAnalysisResult> {
   const deviceProfile = detectDevice(
@@ -215,36 +236,70 @@ export async function analyzeFingerprint(data: FingerprintData): Promise<FullAna
   const anomaly = analyzeAnomalies(data);
   const integrity = await analyzeIntegrity(data);
   const exposure = analyzeExposure(data, collectPageArtifacts());
+  const tracking = await analyzeTrackingPosture({ runNetworkProbes: true });
 
-  // Blend anomaly with integrity (lower integrity → lower anomaly "clean" score)
+  // Merge tracking surface into exposure score for UI consistency
+  const blendedExposureScore = Math.round(
+    exposure.exposureScore * 0.35 + tracking.trackingSurfaceScore * 0.65
+  );
+  const exposureMerged: ExposureReport = {
+    ...exposure,
+    exposureScore: blendedExposureScore,
+    overallRisk:
+      blendedExposureScore >= 75
+        ? 'CRITICAL'
+        : blendedExposureScore >= 55
+          ? 'HIGH'
+          : blendedExposureScore >= 35
+            ? 'MEDIUM'
+            : 'LOW',
+    recommendations: [...tracking.recommendations.slice(0, 3), ...exposure.recommendations].slice(
+      0,
+      6
+    ),
+  };
+
   const blendedAnomalyScore = Math.round(anomaly.overallScore * 0.55 + integrity.score * 0.45);
 
+  // Overall privacy posture: protection-heavy (not uniqueness-heavy)
   const overallScore = Math.round(
-    (100 - uniqueness.overallScore) * 0.28 + // lower uniqueness better for privacy posture
-      consistency.overallScore * 0.22 +
-      integrity.score * 0.28 +
-      (100 - exposure.exposureScore) * 0.22
+    tracking.protectionScore * 0.4 +
+      (100 - tracking.trackingSurfaceScore) * 0.25 +
+      (100 - uniqueness.overallScore) * 0.12 +
+      consistency.overallScore * 0.1 +
+      integrity.score * 0.13
   );
 
   const privacyRiskLevel = getPrivacyRiskLevel(
     uniqueness.overallScore,
-    consistency.overallScore,
-    integrity.score,
-    exposure.exposureScore
+    tracking.trackingSurfaceScore,
+    tracking.protectionScore
   );
 
-  const trackabilityLevel = getTrackabilityLevel(uniqueness.overallScore);
+  const trackabilityLevel = getTrackabilityLevel(
+    uniqueness.overallScore,
+    tracking.trackingSurfaceScore
+  );
 
-  const aiReport = generateAIReport(data, uniqueness, consistency, anomaly, integrity, exposure);
+  const aiReport = generateAIReport(
+    data,
+    uniqueness,
+    consistency,
+    anomaly,
+    integrity,
+    exposureMerged,
+    tracking
+  );
 
   const enhancedAiReport: AIReport = {
     ...aiReport,
     recommendations: [
-      ...deviceAwareAnalysis.recommendations.slice(0, 2).map(
+      ...tracking.recommendations.slice(0, 3),
+      ...deviceAwareAnalysis.recommendations.slice(0, 1).map(
         (r) => `[${r.priority.toUpperCase()}] ${r.title}: ${r.description}`
       ),
       ...aiReport.recommendations,
-    ].slice(0, 8),
+    ].slice(0, 10),
   };
 
   return {
@@ -261,25 +316,26 @@ export async function analyzeFingerprint(data: FingerprintData): Promise<FullAna
     deviceProfile,
     deviceAwareAnalysis,
     integrity,
-    exposure,
+    exposure: exposureMerged,
+    tracking,
     targetDetection: {
       results: [],
-      overallRisk: exposure.overallRisk,
-      totalRiskScore: exposure.exposureScore,
+      overallRisk: exposureMerged.overallRisk,
+      totalRiskScore: exposureMerged.exposureScore,
       criticalTargets: [],
       allSignals: [],
-      exposure,
+      exposure: exposureMerged,
     },
   };
 }
 
 export function getRiskLevelDescription(level: string): string {
   const descriptions: Record<string, string> = {
-    very_low: 'Very low risk — hard to single out via passive fingerprinting alone',
-    low: 'Low risk — tracking is limited without logins or cross-site cookies',
-    medium: 'Medium risk — partial re-identification is realistic',
-    high: 'High risk — fingerprint is distinctive and APIs are exposed',
-    very_high: 'Very high risk — unique traits + rich exposure surface',
+    very_low: 'Very low risk — strong protections and limited tracking surface',
+    low: 'Low risk — tracking limited without logins',
+    medium: 'Medium risk — partial re-identification / ad APIs open',
+    high: 'High risk — wide ad or fingerprint surface (typical stock Chrome)',
+    very_high: 'Very high risk — unique traits and/or fully open deep tracking APIs',
   };
   return descriptions[level] || 'Unknown';
 }

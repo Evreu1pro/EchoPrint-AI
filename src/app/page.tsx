@@ -12,6 +12,7 @@ import { CategorySection } from '@/components/scanner/ParameterCard';
 import { ExportButton } from '@/components/scanner/ExportButton';
 import { DeviceBadge, DeviceInfoCard } from '@/components/scanner/DeviceBadge';
 import { TargetDetectionDisplay } from '@/components/scanner/TargetDetectionDisplay';
+import { TrackingPostureDisplay } from '@/components/scanner/TrackingPostureDisplay';
 import { useScanner } from '@/hooks/useScanner';
 import { fingerprintToCategories } from '@/lib/utils/display';
 import type { Locale } from '@/lib/i18n/messages';
@@ -24,6 +25,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Layers,
+  Megaphone,
 } from 'lucide-react';
 
 export default function Home() {
@@ -60,6 +62,7 @@ export default function Home() {
   const categories = fingerprintData ? fingerprintToCategories(fingerprintData) : [];
   const integrity = analysisResult?.integrity;
   const exposure = analysisResult?.exposure;
+  const tracking = analysisResult?.tracking;
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070a0e] text-zinc-100">
@@ -90,6 +93,7 @@ export default function Home() {
 
             <div className="mt-12 grid gap-3 text-left sm:grid-cols-2">
               {[
+                { icon: Megaphone, title: t(locale, 'featTracking'), desc: t(locale, 'featTrackingDesc') },
                 { icon: Fingerprint, title: t(locale, 'featUniqueness'), desc: t(locale, 'featUniquenessDesc') },
                 { icon: Shield, title: t(locale, 'featIntegrity'), desc: t(locale, 'featIntegrityDesc') },
                 { icon: Crosshair, title: t(locale, 'featExposure'), desc: t(locale, 'featExposureDesc') },
@@ -175,7 +179,7 @@ export default function Home() {
             )}
 
             {/* Scores */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <BigScoreCard
                 title={t(locale, 'scoreOverall')}
                 score={analysisResult.overallScore}
@@ -183,9 +187,29 @@ export default function Home() {
                 type="overall"
               />
               <ScoreCard
+                title={t(locale, 'scoreTrackingSurface')}
+                score={tracking?.trackingSurfaceScore ?? exposure?.exposureScore ?? 0}
+                description={
+                  tracking
+                    ? `${t(locale, 'protectionLevel')}: ${tracking.protectionLevel}`
+                    : riskLabel(locale, analysisResult.trackabilityLevel)
+                }
+                type="exposure"
+              />
+              <ScoreCard
+                title={t(locale, 'scoreProtection')}
+                score={tracking?.protectionScore ?? analysisResult.overallScore}
+                description={
+                  tracking
+                    ? `${tracking.blockedNetworkCount}/${tracking.networkProbes.length} trackers blocked`
+                    : ''
+                }
+                type="consistency"
+              />
+              <ScoreCard
                 title={t(locale, 'scoreUniqueness')}
                 score={analysisResult.uniqueness.overallScore}
-                description={`${Math.round(analysisResult.uniqueness.bitsOfEntropy)} bits`}
+                description={`${Math.round(analysisResult.uniqueness.bitsOfEntropy)} bits · ${locale === 'ru' ? 'не равно приватности' : '≠ privacy'}`}
                 type="uniqueness"
               />
               <ScoreCard
@@ -207,6 +231,12 @@ export default function Home() {
                 type="consistency"
               />
             </div>
+
+            {tracking && (
+              <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 sm:p-6">
+                <TrackingPostureDisplay tracking={tracking} locale={locale} />
+              </section>
+            )}
 
             {exposure && (
               <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 sm:p-6">

@@ -32,6 +32,7 @@ export function ExportButton({
       trackabilityLevel: analysisResult.trackabilityLevel,
       integrity: analysisResult.integrity,
       exposure: analysisResult.exposure,
+      tracking: analysisResult.tracking,
       aiReport: analysisResult.aiReport,
     },
     disclaimer:
