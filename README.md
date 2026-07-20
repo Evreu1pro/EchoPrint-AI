@@ -13,13 +13,15 @@
 
 | # | Name | What it does |
 |---|------|----------------|
-| **M1** | Network (server `/api/fp`) | IP ASN/type/VPN, JA3/JA4 hooks, header order, WebRTC vs HTTP, **geo↔timezone map** (>1000 km = mismatch) |
+| **M1** | Network (`/api/fp`) | IP ASN/type/VPN, JA3/JA4 hooks, header order, WebRTC vs HTTP, **geo↔timezone map** (>1000 km = mismatch) |
 | **M2** | Hardware | **stable_id**: 3× canvas, WebGL, WebGPU, Audio, fonts, screen, Math — same on all browsers of one PC |
 | **M3** | Software | Spoof (UA/CH/GPU/fonts), adblock DOM, Brave, canvas noise, tracker script probes → **protection 0 vs 95** |
 | **M4** | Four scores | **A** uniqueness · **B** spoof · **C** aggressiveness · **D** vulnerability + trackability % |
 | **M5** | Advanced | localStorage temporal ID, emoji FP, VM WebGL strings |
 
-Privacy: fingerprint work is client-side; M1 is **ephemeral** server request (no DB). JA3 needs edge headers or [sidecar](docs/ja3-sidecar.md).
+**History & compare** — last 10 full reports stay in `localStorage` only. Select two scans (e.g. stock Chrome vs Brave) and diff scores / `stable_id` / protection.
+
+Privacy: M2–M5 run client-side; M1 is an **ephemeral** server request (no DB). History never leaves the browser. JA3 needs edge headers or [sidecar](docs/ja3-sidecar.md).
 
 ---
 
@@ -37,6 +39,9 @@ Open [http://localhost:3000](http://localhost:3000).
 ```bash
 npm run build
 npm start
+npm test          # unit tests (scoring, compare, IP extract)
+npm run typecheck
+npm run lint
 ```
 
 ---
@@ -48,8 +53,6 @@ npm start
 1. Import `Evreu1pro/EchoPrint-AI` in Vercel  
 2. Framework: **Next.js** (auto)  
 3. Build: `npm run build` · Output: default  
-
-Or:
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Evreu1pro/EchoPrint-AI)
 
@@ -65,7 +68,8 @@ const nextConfig = {
 };
 ```
 
-Then `npm run build` → publish the `out/` folder.
+Then `npm run build` → publish the `out/` folder.  
+Note: `/api/fp` will not work on pure static hosting (M1 falls back to empty network module).
 
 ---
 
@@ -73,41 +77,39 @@ Then `npm run build` → publish the `out/` folder.
 
 ```
 src/
-  app/                 # Next.js App Router UI
-  components/          # Layout + scanner UI
-  hooks/useScanner.ts  # Collect → analyze pipeline
+  app/                      # Next.js App Router UI + /api/fp
+  components/scanner/       # Report, history, compare
+  hooks/useModuleScan.ts    # Pipeline + local history
   lib/
-    fingerprint/       # Signal collectors (canvas, webgl, audio, …)
-    engine/
-      integrity.ts     # Spoof / multi-sample / automation
-      exposure.ts      # Vector map + live tracker intel
-      tracking-posture.ts
-    server/network-detective/  # Module 1 — server-side network view
-    analysis/          # Uniqueness, consistency, anomaly, report
-    i18n/messages.ts   # EN / RU strings
-    detection/         # Thin adapter (legacy API → exposure)
-  app/api/network/     # POST/GET Network Detective API
+    modules/                # M1–M5 pipeline
+      m1-network/           # IP extract, intel, geo↔tz
+      m2-hardware/
+      m3-software/
+      m4-scoring/
+      m5-advanced/
+    history/                # localStorage + compare (pure)
+    i18n/messages.ts        # EN / RU
 ```
 
-See [docs/MODULE-1-NETWORK-DETECTIVE.md](docs/MODULE-1-NETWORK-DETECTIVE.md).
+See [docs/MODULE-1-NETWORK-DETECTIVE.md](docs/MODULE-1-NETWORK-DETECTIVE.md) and [docs/ARCHITECTURE-M1-M5.md](docs/ARCHITECTURE-M1-M5.md).
 
 ### Adding a detector
 
-1. Collector: `src/lib/fingerprint/<signal>.ts`  
-2. Wire into `collector.ts`  
-3. Integrity rule: `src/lib/engine/integrity.ts`  
-4. Consistency rule: `src/lib/analysis/consistency.ts`  
-5. Tracker intel (live match only): `TRACKER_INTEL` in `exposure.ts`
+1. Collect in the matching `src/lib/modules/mN-*/` module  
+2. Extend `types.ts` if the report shape changes  
+3. Wire scoring in `m4-scoring/scores.ts` when the signal should move A/B/C/D  
 
 ---
 
 ## Methodology (short)
 
-**Uniqueness** — rarity priors (global-ish frequencies) + estimated signal entropy → score 0–100 (higher = easier to re-identify).
+**Uniqueness** — estimated signal entropy → score 0–100 (higher = easier to re-identify).
 
-**Integrity** — five canvas samples + three offline-audio samples; non-native `Navigator` getters; CH vs UA; GPU vs OS; WebDriver / `cdc_` markers.
+**Spoof / undercover** — geo↔tz mismatch, datacenter/TOR, WebRTC≠HTTP, software spoof findings.
 
-**Exposure** — capability surface (what APIs leak) separate from **live hits** (Performance Resource Timing, script tags, cookie/storage key patterns for Meta, Google, TikTok, Amazon, AliExpress, LinkedIn, Microsoft, X, Yandex, Hotjar, …).
+**Protection / aggressiveness** — Brave, canvas noise, adblock DOM, tracker script probes.
+
+**Vulnerability** — open ad surface + powerful browser APIs (USB, Bluetooth, GPU, …).
 
 This project is **educational**. It does not claim perfect bot detection or legal tracker blocking.
 
@@ -116,8 +118,8 @@ This project is **educational**. It does not claim perfect bot detection or lega
 ## Stack
 
 - Next.js 16 · React 19 · TypeScript  
-- Tailwind CSS 4 · shadcn/ui patterns  
-- FingerprintJS (optional visitorId component)  
+- Tailwind CSS 4 · shadcn-style Button  
+- Vitest (unit) · GitHub Actions CI  
 
 ---
 

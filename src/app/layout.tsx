@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EchoPrint AI — Browser fingerprint integrity lab",
+  title: "EchoPrint AI — M1–M5 fingerprint lab",
   description:
-    "Client-side educational scanner for browser uniqueness, spoof/integrity detection, and tracker exposure. No data leaves your device.",
+    "Educational scanner: network intel, hardware stable_id, spoof/protection scores. History stays local.",
   keywords: [
     "browser fingerprint",
     "canvas fingerprint",
@@ -28,16 +27,16 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "EchoPrint AI" }],
   openGraph: {
-    title: "EchoPrint AI — Browser fingerprint integrity lab",
+    title: "EchoPrint AI — M1–M5 fingerprint lab",
     description:
-      "Measure uniqueness, integrity (spoof noise), and tracker exposure — fully in your browser.",
+      "Separate empty Chrome from hardened browsers. Uniqueness, spoof, protection, vulnerability.",
     type: "website",
     url: "https://echo-print-ai.vercel.app",
   },
   twitter: {
     card: "summary_large_image",
     title: "EchoPrint AI",
-    description: "Browser fingerprint integrity lab",
+    description: "M1–M5 browser fingerprint integrity lab",
   },
 };
 
@@ -59,7 +58,6 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased bg-[#070a0e] text-zinc-100`}
       >
         {children}
-        <Toaster />
       </body>
     </html>
   );

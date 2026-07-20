@@ -3,7 +3,7 @@
 // ============================================================
 
 import type { Module1Network } from '../types';
-import { extractClientIp } from '@/lib/server/network-detective/ip';
+import { extractClientIp } from './ip';
 import { fetchIpIntel } from './ip-intel';
 import { extractHeaderOrder, extractTlsFromHeaders } from './header-order';
 import { geoTimezoneMismatch } from './geo-timezone';

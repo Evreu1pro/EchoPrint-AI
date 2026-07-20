@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { PrivacyNotice } from '@/components/layout/PrivacyNotice';
 import { ScannerButton } from '@/components/scanner/ScannerButton';
 import { ModuleReportDisplay } from '@/components/scanner/ModuleReportDisplay';
+import { ScanHistoryPanel } from '@/components/scanner/ScanHistoryPanel';
+import { CompareView } from '@/components/scanner/CompareView';
 import { useModuleScan } from '@/hooks/useModuleScan';
 import type { Locale } from '@/lib/i18n/messages';
 import { t } from '@/lib/i18n/messages';
+import type { ScanHistoryEntry } from '@/lib/history/store';
 import {
   Fingerprint,
   Shield,
@@ -19,35 +22,98 @@ import {
   Loader2,
 } from 'lucide-react';
 
-export default function Home() {
-  const [locale, setLocale] = useState<Locale>('en');
-  const { isScanning, progress, report, error, startScan, reset } = useModuleScan();
+type ViewMode = 'home' | 'report' | 'compare';
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('echoprint-locale') as Locale | null;
-      if (saved === 'en' || saved === 'ru') setLocale(saved);
-      else if (navigator.language?.toLowerCase().startsWith('ru')) setLocale('ru');
-    } catch {
-      /* ignore */
-    }
-  }, []);
+const LOCALE_KEY = 'echoprint-locale';
+
+function subscribeLocale(onChange: () => void) {
+  if (typeof window === 'undefined') return () => undefined;
+  const handler = (e: StorageEvent) => {
+    if (e.key === null || e.key === LOCALE_KEY) onChange();
+  };
+  window.addEventListener('storage', handler);
+  return () => window.removeEventListener('storage', handler);
+}
+
+function readLocale(): Locale {
+  if (typeof window === 'undefined') return 'en';
+  try {
+    const saved = localStorage.getItem(LOCALE_KEY);
+    if (saved === 'en' || saved === 'ru') return saved;
+    if (navigator.language?.toLowerCase().startsWith('ru')) return 'ru';
+  } catch {
+    /* ignore */
+  }
+  return 'en';
+}
+
+export default function Home() {
+  const locale = useSyncExternalStore(subscribeLocale, readLocale, () => 'en' as Locale);
+
+  const {
+    isScanning,
+    progress,
+    report,
+    error,
+    history,
+    startScan,
+    reset,
+    viewEntry,
+    removeEntry,
+    clearAllHistory,
+  } = useModuleScan();
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [comparePair, setComparePair] = useState<{
+    left: ScanHistoryEntry;
+    right: ScanHistoryEntry;
+  } | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('home');
 
   const changeLocale = (l: Locale) => {
-    setLocale(l);
     try {
-      localStorage.setItem('echoprint-locale', l);
+      localStorage.setItem(LOCALE_KEY, l);
     } catch {
       /* ignore */
     }
+    window.dispatchEvent(new StorageEvent('storage', { key: LOCALE_KEY }));
   };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 2) return [prev[1]!, id];
+      return [...prev, id];
+    });
+  };
+
+  const startCompare = () => {
+    if (selectedIds.length !== 2) return;
+    const left = history.find((e) => e.id === selectedIds[0]);
+    const right = history.find((e) => e.id === selectedIds[1]);
+    if (!left || !right) return;
+    setComparePair({ left, right });
+    setViewMode('compare');
+  };
+
+  // Derive mode: while scanning stay on progress; after report exists prefer report unless compare
+  const effectiveMode: ViewMode =
+    isScanning
+      ? 'home'
+      : viewMode === 'compare' && comparePair
+        ? 'compare'
+        : report
+          ? 'report'
+          : 'home';
+
+  const showLanding = !isScanning && effectiveMode === 'home' && !report;
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070a0e] text-zinc-100">
       <Header locale={locale} onLocaleChange={changeLocale} />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-10">
-        {!report && !isScanning && (
+        {showLanding && (
           <section className="mx-auto mb-14 max-w-3xl text-center">
             <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-500/25 bg-gradient-to-b from-cyan-500/20 to-transparent shadow-[0_0_40px_-10px_rgba(34,211,238,0.45)]">
               <Fingerprint className="h-8 w-8 text-cyan-400" />
@@ -67,7 +133,10 @@ export default function Home() {
 
             <div className="mt-8 space-y-3">
               <ScannerButton
-                onClick={startScan}
+                onClick={() => {
+                  setViewMode('home');
+                  void startScan();
+                }}
                 isScanning={isScanning}
                 label={locale === 'ru' ? 'Полный скан M1–M5' : 'Full scan M1–M5'}
               />
@@ -76,6 +145,23 @@ export default function Home() {
                   ? '~15 с · /api/fp IP-intel · 3 canvas · WebGL/WebGPU · protection probes'
                   : '~15s · /api/fp IP-intel · 3 canvas · WebGL/WebGPU · protection probes'}
               </p>
+            </div>
+
+            <div className="mt-10 text-left">
+              <ScanHistoryPanel
+                locale={locale}
+                entries={history}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
+                onView={(e) => {
+                  viewEntry(e);
+                  setComparePair(null);
+                  setViewMode('report');
+                }}
+                onCompare={startCompare}
+                onRemove={removeEntry}
+                onClear={clearAllHistory}
+              />
             </div>
 
             <div className="mt-12 grid gap-3 text-left sm:grid-cols-2">
@@ -127,7 +213,9 @@ export default function Home() {
             <div id="how" className="mt-12 rounded-xl border border-zinc-800 bg-zinc-900/30 p-5 text-left">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
                 <Layers className="h-4 w-4 text-cyan-400" />
-                {locale === 'ru' ? 'Почему Chrome и «макс. защита» больше не одинаковые' : 'Why Chrome ≠ max protection'}
+                {locale === 'ru'
+                  ? 'Почему Chrome и «макс. защита» больше не одинаковые'
+                  : 'Why Chrome ≠ max protection'}
               </h2>
               <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-zinc-400">
                 <li>
@@ -142,8 +230,8 @@ export default function Home() {
                 </li>
                 <li>
                   {locale === 'ru'
-                    ? 'M1+B score: geo↔tz >1000km и datacenter IP поднимают «подставной»'
-                    : 'M1+B score: geo↔tz >1000km and datacenter IP raise undercover score'}
+                    ? 'История + compare: два скана (Chrome vs hardened) рядом'
+                    : 'History + compare: two scans (Chrome vs hardened) side by side'}
                 </li>
               </ol>
             </div>
@@ -170,7 +258,19 @@ export default function Home() {
           </div>
         )}
 
-        {report && !isScanning && (
+        {effectiveMode === 'compare' && comparePair && !isScanning && (
+          <CompareView
+            locale={locale}
+            left={comparePair.left}
+            right={comparePair.right}
+            onBack={() => {
+              setComparePair(null);
+              setViewMode(report ? 'report' : 'home');
+            }}
+          />
+        )}
+
+        {effectiveMode === 'report' && report && !isScanning && (
           <div className="space-y-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -193,11 +293,23 @@ export default function Home() {
                     a.click();
                   }}
                 >
-                  Export JSON
+                  {t(locale, 'exportJson')}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+                  onClick={() => {
+                    reset();
+                    setViewMode('home');
+                    setComparePair(null);
+                  }}
+                >
+                  {locale === 'ru' ? 'На главную' : 'Home'}
                 </button>
                 <ScannerButton
                   onClick={() => {
-                    reset();
+                    setComparePair(null);
+                    setViewMode('home');
                     void startScan();
                   }}
                   isScanning={false}
@@ -206,6 +318,22 @@ export default function Home() {
                 />
               </div>
             </div>
+
+            <ScanHistoryPanel
+              locale={locale}
+              entries={history}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              onView={(e) => {
+                viewEntry(e);
+                setComparePair(null);
+                setViewMode('report');
+              }}
+              onCompare={startCompare}
+              onRemove={removeEntry}
+              onClear={clearAllHistory}
+            />
+
             <ModuleReportDisplay report={report} locale={locale} />
           </div>
         )}

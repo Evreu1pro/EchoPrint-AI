@@ -31,7 +31,7 @@ export function Header({ locale, onLocaleChange }: HeaderProps) {
           <div
             className="flex rounded-md border border-zinc-800 bg-zinc-900/80 p-0.5 text-xs"
             role="group"
-            aria-label={t(locale, "lang")}
+            aria-label="Language"
           >
             {(["en", "ru"] as Locale[]).map((code) => (
               <button
