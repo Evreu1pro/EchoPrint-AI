@@ -1,35 +1,25 @@
 # EchoPrint AI
 
-**Browser fingerprint integrity lab** — educational, fully client-side.
+**M1–M5 fingerprint lab** — separates empty Chrome from hardened browsers.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](https://www.typescriptlang.org/)
 
-**Live:** [echo-print-ai.vercel.app](https://echo-print-ai.vercel.app) · **Repo:** [github.com/Evreu1pro/EchoPrint-AI](https://github.com/Evreu1pro/EchoPrint-AI)
+**Live:** [echo-print-ai.vercel.app](https://echo-print-ai.vercel.app) · **Docs:** [ARCHITECTURE-M1-M5](docs/ARCHITECTURE-M1-M5.md)
 
 ---
 
-## What it does
+## Modules
 
-EchoPrint measures how identifiable and how *trustworthy* your browser environment looks:
+| # | Name | What it does |
+|---|------|----------------|
+| **M1** | Network (server `/api/fp`) | IP ASN/type/VPN, JA3/JA4 hooks, header order, WebRTC vs HTTP, **geo↔timezone map** (>1000 km = mismatch) |
+| **M2** | Hardware | **stable_id**: 3× canvas, WebGL, WebGPU, Audio, fonts, screen, Math — same on all browsers of one PC |
+| **M3** | Software | Spoof (UA/CH/GPU/fonts), adblock DOM, Brave, canvas noise, tracker script probes → **protection 0 vs 95** |
+| **M4** | Four scores | **A** uniqueness · **B** spoof · **C** aggressiveness · **D** vulnerability + trackability % |
+| **M5** | Advanced | localStorage temporal ID, emoji FP, VM WebGL strings |
 
-| Module | Purpose |
-|--------|---------|
-| **Uniqueness** | Entropy / rarity across canvas, WebGL, fonts, hardware, locale… |
-| **Integrity** | Multi-sample canvas & audio noise, navigator prototype tamper, Client Hints vs UA drift, automation markers |
-| **Consistency** | 30+ cross-signal rules (UA ↔ platform ↔ GPU ↔ touch ↔ screen) |
-| **Exposure** | Which fingerprint vectors are *available* to trackers + **live** third-party hits on the current page |
-| **Network detective (server)** | Module 1: what the edge sees — IP, headers, proxy score, Client Hints on the wire, client↔server cross-check (`/api/network`) |
-
-### What changed in v2
-
-- **No more fake “AliExpress detected”** just because Canvas/WebGL exist. Live tracker hits require real scripts, network resources, cookies, or storage keys.
-- **Integrity engine** (multi-sample stability + spoof signals) instead of static keyword-only anomalies.
-- **International UI** (English default + Russian toggle), dark professional theme, mobile-first layout.
-- **Honest docs** and a deployable Next.js app.
-
-Privacy: analysis runs **only in your browser**. Nothing is uploaded.
+Privacy: fingerprint work is client-side; M1 is **ephemeral** server request (no DB). JA3 needs edge headers or [sidecar](docs/ja3-sidecar.md).
 
 ---
 

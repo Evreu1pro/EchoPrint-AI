@@ -1,0 +1,323 @@
+"use client";
+
+import type { FullModuleReport } from "@/lib/modules/types";
+import type { Locale } from "@/lib/i18n/messages";
+import {
+  Cpu,
+  Shield,
+  Crosshair,
+  AlertTriangle,
+  Fingerprint,
+  MapPin,
+  Network,
+} from "lucide-react";
+
+interface Props {
+  report: FullModuleReport;
+  locale: Locale;
+}
+
+function barColor(score: number, invert = false): string {
+  const s = invert ? 100 - score : score;
+  if (s >= 70) return "bg-rose-500";
+  if (s >= 40) return "bg-amber-500";
+  return "bg-emerald-500";
+}
+
+function ScoreBar({
+  label,
+  score,
+  sub,
+  invert,
+}: {
+  label: string;
+  score: number;
+  sub: string;
+  invert?: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+      <div className="flex justify-between gap-2 text-sm">
+        <span className="font-medium text-zinc-100">{label}</span>
+        <span className="tabular-nums text-zinc-300">{score}/100</span>
+      </div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div
+          className={`h-full rounded-full transition-all ${barColor(score, invert)}`}
+          style={{ width: `${Math.min(100, score)}%` }}
+        />
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-zinc-500">{sub}</p>
+    </div>
+  );
+}
+
+/** Simple SVG map: two points + mismatch line */
+function MismatchMap({
+  geoLat,
+  geoLon,
+  tzLat,
+  tzLon,
+  distanceKm,
+  mismatch,
+}: {
+  geoLat: number | null;
+  geoLon: number | null;
+  tzLat: number | null;
+  tzLon: number | null;
+  distanceKm: number | null;
+  mismatch: boolean;
+}) {
+  if (geoLat == null || geoLon == null || tzLat == null || tzLon == null) {
+    return (
+      <p className="text-xs text-zinc-500">
+        Map needs GeoIP lat/lon + known timezone coords (unavailable offline / localhost).
+      </p>
+    );
+  }
+
+  // project lon/lat to 0..100 viewBox
+  const project = (lat: number, lon: number) => {
+    const x = ((lon + 180) / 360) * 100;
+    const y = ((90 - lat) / 180) * 100;
+    return { x, y };
+  };
+  const a = project(geoLat, geoLon);
+  const b = project(tzLat, tzLon);
+
+  return (
+    <div>
+      <svg viewBox="0 0 100 56" className="w-full rounded-lg border border-zinc-800 bg-zinc-950">
+        {/* grid */}
+        <rect width="100" height="56" fill="#09090b" />
+        {[20, 40, 60, 80].map((x) => (
+          <line key={x} x1={x} y1={0} x2={x} y2={56} stroke="#27272a" strokeWidth="0.2" />
+        ))}
+        {[14, 28, 42].map((y) => (
+          <line key={y} x1={0} y1={y} x2={100} y2={y} stroke="#27272a" strokeWidth="0.2" />
+        ))}
+        {mismatch && (
+          <line
+            x1={a.x}
+            y1={a.y * 0.56}
+            x2={b.x}
+            y2={b.y * 0.56}
+            stroke="#f43f5e"
+            strokeWidth="0.6"
+            strokeDasharray="1.5 1"
+          />
+        )}
+        <circle cx={a.x} cy={a.y * 0.56} r="1.8" fill="#22d3ee" />
+        <circle cx={b.x} cy={b.y * 0.56} r="1.8" fill="#a78bfa" />
+      </svg>
+      <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-zinc-500">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-cyan-400" />
+          GeoIP ({geoLat.toFixed(1)}, {geoLon.toFixed(1)})
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full bg-violet-400" />
+          Timezone point
+        </span>
+        {distanceKm != null && (
+          <span className={mismatch ? "text-rose-400" : "text-emerald-400"}>
+            Δ {distanceKm} km {mismatch ? "(MISMATCH >1000km)" : "(ok)"}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function ModuleReportDisplay({ report, locale }: Props) {
+  const { m1, m2, m3, m4, m5 } = report;
+  const ru = locale === "ru";
+
+  return (
+    <div className="space-y-8">
+      {/* CreepJS-style headline */}
+      <div className="rounded-2xl border border-cyan-500/25 bg-gradient-to-br from-cyan-500/10 to-transparent p-5 sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-cyan-400">
+          {ru ? "Вердикт" : "Verdict"}
+        </p>
+        <p className="mt-2 text-xl font-semibold leading-snug text-white sm:text-2xl">
+          {ru
+            ? `Вас можно отследить на ~${m4.trackabilityPercent}% сайтов с fingerprint-пробами`
+            : `You can be tracked on ~${m4.trackabilityPercent}% of fingerprinting sites`}
+        </p>
+        <p className="mt-3 text-sm leading-relaxed text-zinc-400">{m4.trackabilityNarrative}</p>
+      </div>
+
+      {/* M4 scores */}
+      <div>
+        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
+          <Crosshair className="h-5 w-5 text-cyan-400" />
+          {ru ? "4 скора" : "Four scores"}
+        </h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <ScoreBar label={`A · ${ru ? "Уникальность" : "Uniqueness"}`} score={m4.uniqueness} sub={`${m4.uniquenessLabel} · ~${m4.uniquenessBits} bits`} />
+          <ScoreBar label={`B · ${ru ? "Подставной" : "Spoof / undercover"}`} score={m4.spoof} sub={m4.spoofLabel} />
+          <ScoreBar label={`C · ${ru ? "Агрессивность (блок)" : "Aggressiveness"}`} score={m4.aggressiveness} sub={m4.aggressivenessLabel} invert />
+          <ScoreBar label={`D · ${ru ? "Уязвимость" : "Vulnerability"}`} score={m4.vulnerability} sub={m4.vulnerabilityLabel} />
+        </div>
+        {m4.formulaNotes.length > 0 && (
+          <ul className="mt-3 space-y-1 text-[11px] text-zinc-600">
+            {m4.formulaNotes.map((n, i) => (
+              <li key={i}>· {n}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* M1 map + network */}
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 sm:p-6">
+        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
+          <Network className="h-5 w-5 text-cyan-400" />
+          M1 · {ru ? "Сетевой детектив" : "Network detective"}
+        </h3>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-zinc-400">
+              <MapPin className="h-3.5 w-3.5" />
+              GeoIP vs Timezone
+            </p>
+            <MismatchMap {...m1.geoTimezoneMismatch} />
+          </div>
+          <div className="space-y-2 text-xs text-zinc-400">
+            <p>
+              <span className="text-zinc-500">IP:</span> {m1.ipIntel.ip || "—"} ·{" "}
+              {m1.ipIntel.connectionType} · VPN {m1.ipIntel.vpnScore}
+            </p>
+            <p>
+              <span className="text-zinc-500">ASN:</span> {m1.ipIntel.asn || "—"}{" "}
+              {m1.ipIntel.asOrg || ""}
+            </p>
+            <p>
+              <span className="text-zinc-500">JA3:</span>{" "}
+              {m1.tls.ja3 || m1.tls.note.slice(0, 80)}
+            </p>
+            <p>
+              <span className="text-zinc-500">Header order:</span> {m1.headerOrder.browserGuess}{" "}
+              ({m1.headerOrder.signature.slice(0, 8)})
+            </p>
+            <p>
+              <span className="text-zinc-500">WebRTC vs HTTP:</span> {m1.webrtcVsHttp.status}
+            </p>
+            <p className="text-zinc-500">{m1.webrtcVsHttp.detail}</p>
+            <ul className="mt-2 space-y-1">
+              {m1.findings.map((f, i) => (
+                <li key={i} className="text-zinc-500">
+                  · {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* M2 hardware */}
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 sm:p-6">
+        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
+          <Cpu className="h-5 w-5 text-cyan-400" />
+          M2 · {ru ? "Железо (stable_id)" : "Hardware (stable_id)"}
+        </h3>
+        <p className="mb-3 font-mono text-sm text-cyan-300/90">{m2.stableId}</p>
+        <p className="mb-3 text-xs text-zinc-500">
+          {ru
+            ? "Одинаковый на всех браузерах одного ПК — это нормально. Коллизия «пустой Chrome = основной» объясняется железом."
+            : "Same across browsers on one PC — expected. Empty Chrome vs hardened still share this ID."}
+        </p>
+        <div className="grid gap-2 text-xs sm:grid-cols-2">
+          <Row k="WebGL" v={m2.webgl.renderer.slice(0, 80)} />
+          <Row k="Canvas" v={m2.canvas.combined} />
+          <Row k="Audio" v={m2.audio.hash} />
+          <Row k="Fonts" v={`${m2.fonts.count} · ${m2.fonts.osGuess}`} />
+          <Row k="WebGPU" v={m2.webgpu.supported ? m2.webgpu.adapterInfo || "yes" : "no"} />
+          <Row k="Math" v={m2.math.hash} />
+          <Row
+            k="Screen"
+            v={`${m2.screen.width}×${m2.screen.height} dpr=${m2.screen.devicePixelRatio}`}
+          />
+          <Row k="Entropy ~" v={`${m2.entropyBitsEstimate} bits`} />
+        </div>
+      </section>
+
+      {/* M3 software */}
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 sm:p-6">
+        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
+          <Shield className="h-5 w-5 text-cyan-400" />
+          M3 · {ru ? "Софт / защита" : "Software / protection"}
+        </h3>
+        <div className="mb-3 flex flex-wrap gap-2 text-xs">
+          <Pill ok={m3.protection.score >= 50} label={`protection ${m3.protection.score}`} />
+          <Pill ok={m3.protection.brave} label="Brave" />
+          <Pill ok={m3.protection.rfpCanvasNoise} label="Canvas noise" />
+          <Pill ok={m3.extensions.adsBlockedDom} label="Adblock DOM" />
+          <Pill ok={m3.spoofScore < 30} label={`spoof ${m3.spoofScore}`} />
+        </div>
+        <p className="text-xs text-zinc-500">
+          Trackers blocked {m3.protection.trackerScriptsBlocked} / loaded{" "}
+          {m3.protection.trackerScriptsLoaded}
+        </p>
+        <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+          {m3.protection.signals.map((s, i) => (
+            <li key={i}>· {s}</li>
+          ))}
+          {m3.spoofFindings.map((f) => (
+            <li key={f.id} className="text-amber-400/90">
+              · [{f.severity}] {f.detail}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* M5 */}
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 sm:p-6">
+        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-white">
+          <Fingerprint className="h-5 w-5 text-cyan-400" />
+          M5 · {ru ? "Продвинутое" : "Advanced"}
+        </h3>
+        {m5.temporal.message && (
+          <p className="mb-2 flex gap-2 text-sm text-amber-300/90">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            {m5.temporal.message}
+          </p>
+        )}
+        <div className="grid gap-2 text-xs sm:grid-cols-2">
+          <Row k="Emoji FP" v={m5.emojiFingerprint} />
+          <Row k="VM probability" v={`${Math.round(m5.vmProbability * 100)}%`} />
+        </div>
+        {m5.vmSignals.length > 0 && (
+          <ul className="mt-2 text-xs text-rose-400/80">
+            {m5.vmSignals.map((s, i) => (
+              <li key={i}>· {s}</li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-2 rounded border border-zinc-800/80 bg-zinc-950/40 px-2 py-1.5">
+      <span className="text-zinc-500">{k}</span>
+      <span className="max-w-[60%] truncate font-mono text-zinc-300">{v}</span>
+    </div>
+  );
+}
+
+function Pill({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span
+      className={`rounded-full border px-2.5 py-1 ${
+        ok
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+          : "border-zinc-700 text-zinc-500"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}

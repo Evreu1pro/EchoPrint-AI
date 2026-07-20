@@ -5,12 +5,18 @@ export async function GET() {
   return NextResponse.json({
     name: "EchoPrint AI",
     modules: {
-      "network-detective": {
+      fp: {
         id: 1,
-        path: "/api/network",
+        path: "/api/fp",
         methods: ["GET", "POST"],
         description:
-          "Server-side network detective: IP, headers, proxy signals, Client Hints on the wire, client claim cross-check",
+          "M1 Network: IP intel (ASN/type/VPN), JA3/JA4 headers, header order, WebRTC vs HTTP, geo↔tz",
+      },
+      "network-detective": {
+        id: "1-legacy",
+        path: "/api/network",
+        methods: ["GET", "POST"],
+        description: "Legacy network detective (headers snapshot)",
       },
     },
   });
