@@ -264,3 +264,18 @@ MIT License - используйте свободно для любых целе
 ---
 
 **Сделано с ❤️ для приватности в интернете**
+
+---
+
+## English overview
+
+**EchoPrint AI** is an educational browser fingerprint analyzer.
+
+- Collects 80+ client-side signals
+- Uniqueness + consistency scoring
+- Tracker / target detection (AliExpress, Meta, TikTok, Google, Amazon)
+- Privacy-first: processing stays in the browser
+- Built with **Next.js 15**, **TypeScript**, deployed on **Vercel**
+
+**Live demo:** https://echo-print-ai.vercel.app
+
