@@ -20,6 +20,7 @@ EchoPrint measures how identifiable and how *trustworthy* your browser environme
 | **Integrity** | Multi-sample canvas & audio noise, navigator prototype tamper, Client Hints vs UA drift, automation markers |
 | **Consistency** | 30+ cross-signal rules (UA ↔ platform ↔ GPU ↔ touch ↔ screen) |
 | **Exposure** | Which fingerprint vectors are *available* to trackers + **live** third-party hits on the current page |
+| **Network detective (server)** | Module 1: what the edge sees — IP, headers, proxy score, Client Hints on the wire, client↔server cross-check (`/api/network`) |
 
 ### What changed in v2
 
@@ -90,10 +91,15 @@ src/
     engine/
       integrity.ts     # Spoof / multi-sample / automation
       exposure.ts      # Vector map + live tracker intel
+      tracking-posture.ts
+    server/network-detective/  # Module 1 — server-side network view
     analysis/          # Uniqueness, consistency, anomaly, report
     i18n/messages.ts   # EN / RU strings
     detection/         # Thin adapter (legacy API → exposure)
+  app/api/network/     # POST/GET Network Detective API
 ```
+
+See [docs/MODULE-1-NETWORK-DETECTIVE.md](docs/MODULE-1-NETWORK-DETECTIVE.md).
 
 ### Adding a detector
 

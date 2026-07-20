@@ -49,10 +49,18 @@ export function useScanner(): UseScannerResult {
 
       setProgress({
         stage: 'Ads & deep tracking probes',
-        progress: 92,
+        progress: 88,
         currentSignal: 'Privacy Sandbox + tracker scripts',
         signalsCollected: 16,
-        totalSignals: 18,
+        totalSignals: 20,
+      });
+
+      setProgress({
+        stage: 'Network detective (server)',
+        progress: 94,
+        currentSignal: 'IP · headers · proxy · Client Hints',
+        signalsCollected: 18,
+        totalSignals: 20,
       });
 
       const analysis = await analyzeFingerprint(data);

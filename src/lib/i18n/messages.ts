@@ -37,6 +37,10 @@ const en = {
   sectionIntegrity: 'Integrity findings',
   sectionExposure: 'Exposure surface',
   sectionTracking: 'Ads & deep tracking',
+  sectionNetworkDetective: 'Network detective (server)',
+  networkCrossCheck: 'Client ↔ server cross-check',
+  networkFindings: 'Network findings',
+  networkHeaders: 'Headers the server received',
   sectionLiveTrackers: 'Live tracker hits',
   sectionSignals: 'Collected signals',
   sectionNoLive:
@@ -115,6 +119,10 @@ const ru: Record<keyof typeof en, string> = {
   sectionIntegrity: 'Находки целостности',
   sectionExposure: 'Поверхность экспозиции',
   sectionTracking: 'Реклама и глубокий трекинг',
+  sectionNetworkDetective: 'Сетевой детектив (сервер)',
+  networkCrossCheck: 'Сверка client ↔ server',
+  networkFindings: 'Сетевые находки',
+  networkHeaders: 'Заголовки, которые видит сервер',
   sectionLiveTrackers: 'Живые трекеры',
   sectionSignals: 'Собранные сигналы',
   sectionNoLive:

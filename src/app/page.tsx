@@ -13,6 +13,7 @@ import { ExportButton } from '@/components/scanner/ExportButton';
 import { DeviceBadge, DeviceInfoCard } from '@/components/scanner/DeviceBadge';
 import { TargetDetectionDisplay } from '@/components/scanner/TargetDetectionDisplay';
 import { TrackingPostureDisplay } from '@/components/scanner/TrackingPostureDisplay';
+import { NetworkDetectiveDisplay } from '@/components/scanner/NetworkDetectiveDisplay';
 import { useScanner } from '@/hooks/useScanner';
 import { fingerprintToCategories } from '@/lib/utils/display';
 import type { Locale } from '@/lib/i18n/messages';
@@ -63,6 +64,7 @@ export default function Home() {
   const integrity = analysisResult?.integrity;
   const exposure = analysisResult?.exposure;
   const tracking = analysisResult?.tracking;
+  const network = analysisResult?.network;
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070a0e] text-zinc-100">
@@ -231,6 +233,12 @@ export default function Home() {
                 type="consistency"
               />
             </div>
+
+            {network && (
+              <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 sm:p-6">
+                <NetworkDetectiveDisplay report={network} locale={locale} />
+              </section>
+            )}
 
             {tracking && (
               <section className="rounded-2xl border border-zinc-800 bg-zinc-900/30 p-4 sm:p-6">

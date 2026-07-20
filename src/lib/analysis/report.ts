@@ -22,6 +22,8 @@ import {
   analyzeTrackingPosture,
   type TrackingPostureReport,
 } from '../engine/tracking-posture';
+import type { NetworkDetectiveReport } from '../server/network-detective/types';
+import { fetchNetworkDetective } from '../client/fetch-network-detective';
 
 export type FullAnalysisResult = AnalysisResult & {
   deviceProfile: DeviceProfile;
@@ -29,6 +31,8 @@ export type FullAnalysisResult = AnalysisResult & {
   integrity: IntegrityReport;
   exposure: ExposureReport;
   tracking: TrackingPostureReport;
+  /** Module 1 — server-side network detective (null if API unavailable) */
+  network: NetworkDetectiveReport | null;
   targetDetection: {
     results: never[];
     overallRisk: ExposureReport['overallRisk'];
@@ -78,7 +82,8 @@ function generateAIReport(
   anomaly: ReturnType<typeof analyzeAnomalies>,
   integrity: IntegrityReport,
   exposure: ExposureReport,
-  tracking: TrackingPostureReport
+  tracking: TrackingPostureReport,
+  network: NetworkDetectiveReport | null
 ): AIReport {
   const u = interpretUniquenessScore(uniqueness.overallScore);
   const c = interpretConsistencyScore(consistency.overallScore);
@@ -89,6 +94,9 @@ function generateAIReport(
   summary += `Ad/tracking surface: ${tracking.trackingSurfaceScore}/100. `;
   summary += `Uniqueness ${uniqueness.overallScore}/100 — note: a “common” Chrome can still overshare to ads. `;
   summary += tracking.vsStockChrome;
+  if (network) {
+    summary += ` Network detective: ${network.summary}`;
+  }
 
   let uniquenessAssessment = `${u.level}. ${u.description} `;
   if (uniqueness.rarestSignals[0]) {
@@ -124,6 +132,7 @@ function generateAIReport(
 
   const recommendations = [
     ...tracking.recommendations,
+    ...(network?.recommendations.slice(0, 2) ?? []),
     ...exposure.recommendations.slice(0, 2),
     ...generateRecommendations(data, uniqueness, consistency, anomaly, integrity, tracking),
   ].slice(0, 10);
@@ -237,6 +246,8 @@ export async function analyzeFingerprint(data: FingerprintData): Promise<FullAna
   const integrity = await analyzeIntegrity(data);
   const exposure = analyzeExposure(data, collectPageArtifacts());
   const tracking = await analyzeTrackingPosture({ runNetworkProbes: true });
+  // Module 1 — what the server sees (IP, headers, proxy, CH on the wire)
+  const network = await fetchNetworkDetective(data);
 
   // Merge tracking surface into exposure score for UI consistency
   const blendedExposureScore = Math.round(
@@ -261,13 +272,14 @@ export async function analyzeFingerprint(data: FingerprintData): Promise<FullAna
 
   const blendedAnomalyScore = Math.round(anomaly.overallScore * 0.55 + integrity.score * 0.45);
 
-  // Overall privacy posture: protection-heavy (not uniqueness-heavy)
+  // Overall privacy posture: protection-heavy + server network risk
   const overallScore = Math.round(
-    tracking.protectionScore * 0.4 +
-      (100 - tracking.trackingSurfaceScore) * 0.25 +
-      (100 - uniqueness.overallScore) * 0.12 +
+    tracking.protectionScore * 0.34 +
+      (100 - tracking.trackingSurfaceScore) * 0.2 +
+      (100 - uniqueness.overallScore) * 0.1 +
       consistency.overallScore * 0.1 +
-      integrity.score * 0.13
+      integrity.score * 0.11 +
+      (network ? (100 - network.riskScore) * 0.15 : 10)
   );
 
   const privacyRiskLevel = getPrivacyRiskLevel(
@@ -288,7 +300,8 @@ export async function analyzeFingerprint(data: FingerprintData): Promise<FullAna
     anomaly,
     integrity,
     exposureMerged,
-    tracking
+    tracking,
+    network
   );
 
   const enhancedAiReport: AIReport = {
@@ -318,6 +331,7 @@ export async function analyzeFingerprint(data: FingerprintData): Promise<FullAna
     integrity,
     exposure: exposureMerged,
     tracking,
+    network,
     targetDetection: {
       results: [],
       overallRisk: exposureMerged.overallRisk,

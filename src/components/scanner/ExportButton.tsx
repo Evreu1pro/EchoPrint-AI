@@ -33,6 +33,7 @@ export function ExportButton({
       integrity: analysisResult.integrity,
       exposure: analysisResult.exposure,
       tracking: analysisResult.tracking,
+      network: analysisResult.network,
       aiReport: analysisResult.aiReport,
     },
     disclaimer:
