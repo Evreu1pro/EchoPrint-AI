@@ -1,12 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
-  /* config options here */
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  reactStrictMode: false,
+  // Vercel / Node hosting (default). For pure static hosting set:
+  // output: "export", images: { unoptimized: true }
+  reactStrictMode: true,
 };
 
 export default nextConfig;

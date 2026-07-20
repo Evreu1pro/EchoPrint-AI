@@ -57,68 +57,68 @@ export async function collectFingerprint(
   const { getMiscInfo, getMediaQueriesInfo, getBatteryInfo, getPerformanceInfo, getMediaDevicesFull } = await import('./misc');
 
   // 1. Canvas Fingerprint
-  updateProgress('Сбор Canvas данных', 'Canvas 2D');
+  updateProgress('Canvas fingerprint', 'Canvas 2D');
   const canvas = getCanvasFingerprint();
-  await delay(100);
+  await delay(40);
 
   // 2. WebGL Fingerprint
-  updateProgress('Сбор WebGL данных', 'WebGL');
+  updateProgress('WebGL fingerprint', 'WebGL');
   const webgl = getWebGLFingerprint();
-  await delay(100);
+  await delay(40);
 
   // 3. Audio Fingerprint
-  updateProgress('Сбор Audio данных', 'AudioContext');
+  updateProgress('Audio fingerprint', 'AudioContext');
   const audio = await getAudioFingerprint();
-  await delay(100);
+  await delay(40);
 
   // 4. Fonts
-  updateProgress('Определение шрифтов', 'Fonts');
+  updateProgress('Font enumeration', 'Fonts');
   const fonts = getFontsInfo();
-  await delay(100);
+  await delay(40);
 
   // 5. WebRTC
-  updateProgress('Проверка WebRTC', 'WebRTC');
+  updateProgress('WebRTC leak check', 'WebRTC');
   const webrtc = await getWebRTCLeak();
-  await delay(100);
+  await delay(40);
 
   // 6. Media Devices
-  updateProgress('Проверка медиа-устройств', 'Media Devices');
+  updateProgress('Media devices', 'Media Devices');
   const mediaDevices = await getMediaDevicesFull();
-  await delay(100);
+  await delay(40);
 
   // 7. Hardware
-  updateProgress('Сбор информации о железе', 'Hardware');
+  updateProgress('Hardware signals', 'Hardware');
   const hardware = getHardwareInfo();
-  await delay(100);
+  await delay(40);
 
   // 8. Navigator
-  updateProgress('Сбор Navigator данных', 'Navigator');
+  updateProgress('Navigator & Client Hints', 'Navigator');
   const navigatorInfo = await getNavigatorInfo();
   const parsedUA = parseUserAgent(navigatorInfo.userAgent);
-  await delay(100);
+  await delay(40);
 
   // 9. Sensors
-  updateProgress('Проверка сенсоров', 'Sensors');
+  updateProgress('Sensor APIs', 'Sensors');
   const sensors = getSensorsInfo();
-  await delay(100);
+  await delay(40);
 
   // 10. Battery
-  updateProgress('Проверка батареи', 'Battery');
+  updateProgress('Battery API', 'Battery');
   const battery = await getBatteryInfo();
-  await delay(100);
+  await delay(40);
 
   // 11. Media Queries
-  updateProgress('Сбор медиа-настроек', 'Media Queries');
+  updateProgress('CSS media features', 'Media Queries');
   const mediaQueries = getMediaQueriesInfo();
-  await delay(100);
+  await delay(40);
 
   // 12. Storage
-  updateProgress('Проверка Storage API', 'Storage');
+  updateProgress('Storage APIs', 'Storage');
   const storage = await getStorageInfo();
-  await delay(100);
+  await delay(40);
 
   // 13. Performance
-  updateProgress('Анализ Performance', 'Performance');
+  updateProgress('Performance timing', 'Performance');
   const perfData = getPerformanceInfo();
   const perfResult: PerformanceInfo = {
     domContentLoaded: perfData.timing.domContentLoaded,
@@ -127,24 +127,24 @@ export async function collectFingerprint(
     memory: perfData.memory,
     timingAnomaly: false
   };
-  await delay(100);
+  await delay(40);
 
   // 14. Misc
-  updateProgress('Сбор дополнительных данных', 'Misc');
+  updateProgress('Locale, voices, network', 'Misc');
   const misc = getMiscInfo();
-  await delay(100);
+  await delay(40);
 
   // 15. FingerprintJS
-  updateProgress('FingerprintJS анализ', 'FingerprintJS');
-  let fpjs = null;
+  updateProgress('FingerprintJS visitorId', 'FingerprintJS');
+  let fpjs: FingerprintData['fpjs'] = null;
   try {
     const FPJS = await loadFingerprintJS();
     if (FPJS) {
       const fp = await FPJS.load();
-      const result = await fp.detect();
+      const result = await fp.get();
       fpjs = {
         visitorId: result.visitorId,
-        components: result.components
+        components: result.components as Record<string, { value: unknown; duration: number }>
       };
     }
   } catch (e) {
@@ -153,8 +153,8 @@ export async function collectFingerprint(
   }
   await delay(100);
 
-  // Финальный прогресс
-  updateProgress('Завершение', 'Финализация');
+  // Final progress
+  updateProgress('Finalizing collection', 'Done');
 
   const scanDuration = globalThis.performance.now() - startTime;
 
@@ -177,7 +177,7 @@ export async function collectFingerprint(
     fpjs,
     timestamp: new Date().toISOString(),
     scanDuration,
-    totalSignals: 80
+    totalSignals: 100
   };
 }
 

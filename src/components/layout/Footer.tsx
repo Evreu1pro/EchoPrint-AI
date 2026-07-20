@@ -1,26 +1,25 @@
 "use client";
 
-export function Footer() {
+import type { Locale } from "@/lib/i18n/messages";
+import { t } from "@/lib/i18n/messages";
+
+export function Footer({ locale }: { locale: Locale }) {
   return (
-    <footer className="border-t bg-muted/30">
-      <div className="container mx-auto px-4 py-6">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">EchoPrint AI</span>
-            <span>•</span>
-            <span>Образовательный инструмент</span>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <span>© 2025</span>
-            <span>•</span>
-            <span>MIT License</span>
-          </div>
-        </div>
-        
-        <div className="mt-4 text-center text-xs text-muted-foreground/70">
-          Все данные обрабатываются исключительно в вашем браузере. 
-          Никакая информация не отправляется на внешние серверы.
+    <footer className="mt-auto border-t border-zinc-900 bg-[#070a0e]">
+      <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-center text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between sm:text-left sm:px-6">
+        <p>{t(locale, "footerPrivacy")}</p>
+        <div className="flex justify-center gap-4">
+          <a
+            href="https://github.com/Evreu1pro/EchoPrint-AI"
+            className="hover:text-cyan-400"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub
+          </a>
+          <a href="#how" className="hover:text-cyan-400">
+            {t(locale, "footerDocs")}
+          </a>
         </div>
       </div>
     </footer>

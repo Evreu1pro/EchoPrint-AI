@@ -61,29 +61,40 @@ async function getAccelerometerData(): Promise<{
   }
 
   try {
-    const AccelerometerClass = window.Accelerometer as typeof Accelerometer;
-    const accelerometer = new AccelerometerClass({ frequency: 1 });
-    
+    const SensorCtor = (window as unknown as Record<string, unknown>).Accelerometer as
+      | (new (opts: { frequency: number }) => {
+          x: number;
+          y: number;
+          z: number;
+          start: () => void;
+          stop: () => void;
+          addEventListener: (type: string, listener: () => void) => void;
+        })
+      | undefined;
+    if (!SensorCtor) {
+      return { available: false, x: null, y: null, z: null };
+    }
+    const accelerometer = new SensorCtor({ frequency: 1 });
+
     return new Promise((resolve) => {
       accelerometer.addEventListener('reading', () => {
         const data = {
           available: true,
           x: accelerometer.x,
           y: accelerometer.y,
-          z: accelerometer.z
+          z: accelerometer.z,
         };
         accelerometer.stop();
         resolve(data);
       });
-      
+
       accelerometer.addEventListener('error', () => {
         accelerometer.stop();
         resolve({ available: false, x: null, y: null, z: null });
       });
-      
+
       accelerometer.start();
-      
-      // Таймаут
+
       setTimeout(() => {
         accelerometer.stop();
         resolve({ available: false, x: null, y: null, z: null });
@@ -124,9 +135,9 @@ export async function getSensorsInfoFull(): Promise<SensorsInfo & {
     orientationData = await new Promise((resolve) => {
       const handler = (event: DeviceOrientationEvent) => {
         resolve({
-          alpha: event.alpha,
-          beta: event.beta,
-          gamma: event.gamma
+          alpha: event.alpha ?? 0,
+          beta: event.beta ?? 0,
+          gamma: event.gamma ?? 0,
         });
         window.removeEventListener('deviceorientation', handler);
       };
@@ -146,11 +157,13 @@ export async function getSensorsInfoFull(): Promise<SensorsInfo & {
     motionData = await new Promise((resolve) => {
       const handler = (event: DeviceMotionEvent) => {
         resolve({
-          acceleration: event.acceleration ? {
-            x: event.acceleration.x,
-            y: event.acceleration.y,
-            z: event.acceleration.z
-          } : null
+          acceleration: event.acceleration
+            ? {
+                x: event.acceleration.x ?? 0,
+                y: event.acceleration.y ?? 0,
+                z: event.acceleration.z ?? 0,
+              }
+            : null,
         });
         window.removeEventListener('devicemotion', handler);
       };
@@ -173,31 +186,38 @@ export async function getSensorsInfoFull(): Promise<SensorsInfo & {
     }
   }
 
-  // Gyroscope API
+  // Gyroscope Generic Sensor API (optional)
   let gyroscopeData: { x: number; y: number; z: number } | null = null;
   if (basicInfo.gyroscope) {
     try {
-      const GyroscopeClass = window.Gyroscope as typeof Gyroscope;
-      const gyro = new GyroscopeClass({ frequency: 1 });
-      
-      gyroscopeData = await new Promise((resolve) => {
-        gyro.addEventListener('reading', () => {
-          resolve({ x: gyro.x, y: gyro.y, z: gyro.z });
-          gyro.stop();
+      const GyroCtor = (window as unknown as Record<string, unknown>).Gyroscope as
+        | (new (opts: { frequency: number }) => {
+            x: number;
+            y: number;
+            z: number;
+            start: () => void;
+            stop: () => void;
+            addEventListener: (type: string, listener: () => void) => void;
+          })
+        | undefined;
+      if (GyroCtor) {
+        const gyro = new GyroCtor({ frequency: 1 });
+        gyroscopeData = await new Promise((resolve) => {
+          gyro.addEventListener('reading', () => {
+            resolve({ x: gyro.x, y: gyro.y, z: gyro.z });
+            gyro.stop();
+          });
+          gyro.addEventListener('error', () => {
+            gyro.stop();
+            resolve(null);
+          });
+          gyro.start();
+          setTimeout(() => {
+            gyro.stop();
+            resolve(null);
+          }, 2000);
         });
-        
-        gyro.addEventListener('error', () => {
-          gyro.stop();
-          resolve(null);
-        });
-        
-        gyro.start();
-        
-        setTimeout(() => {
-          gyro.stop();
-          resolve(null);
-        }, 2000);
-      });
+      }
     } catch {
       gyroscopeData = null;
     }

@@ -1,40 +1,61 @@
 "use client";
 
 import { Fingerprint, Github } from "lucide-react";
+import type { Locale } from "@/lib/i18n/messages";
+import { t } from "@/lib/i18n/messages";
 
-export function Header() {
+interface HeaderProps {
+  locale: Locale;
+  onLocaleChange: (locale: Locale) => void;
+}
+
+export function Header({ locale, onLocaleChange }: HeaderProps) {
   return (
-    <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center">
-              <Fingerprint className="w-6 h-6 text-white" />
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-background" />
+    <header className="sticky top-0 z-40 border-b border-border/80 bg-[#0b0f14]/80 backdrop-blur-md">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-cyan-500/30 bg-cyan-500/10">
+            <Fingerprint className="h-5 w-5 text-cyan-400" />
           </div>
-          
-          <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-              EchoPrint AI
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold tracking-tight text-zinc-50 sm:text-lg">
+              {t(locale, "brand")}
             </h1>
-            <p className="text-xs text-muted-foreground">
-              Анализатор уникальности устройства
+            <p className="truncate text-[11px] text-zinc-500 sm:text-xs">
+              {t(locale, "tagline")}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            v1.0.0 • Open Source
-          </span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div
+            className="flex rounded-md border border-zinc-800 bg-zinc-900/80 p-0.5 text-xs"
+            role="group"
+            aria-label={t(locale, "lang")}
+          >
+            {(["en", "ru"] as Locale[]).map((code) => (
+              <button
+                key={code}
+                type="button"
+                onClick={() => onLocaleChange(code)}
+                className={`rounded px-2.5 py-1 font-medium uppercase transition-colors ${
+                  locale === code
+                    ? "bg-cyan-500/20 text-cyan-300"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {code}
+              </button>
+            ))}
+          </div>
           <a
-            href="https://github.com"
+            href="https://github.com/Evreu1pro/EchoPrint-AI"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="rounded-md p-2 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
+            aria-label="GitHub"
           >
-            <Github className="w-5 h-5" />
+            <Github className="h-5 w-5" />
           </a>
         </div>
       </div>

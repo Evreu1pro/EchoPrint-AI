@@ -193,7 +193,6 @@ export function getSystemFontsAPI(): string[] {
 
   try {
     const fonts: string[] = [];
-    // @ts-expect-error - checkin API exists
     document.fonts.forEach?.((font: FontFace) => {
       if (font.status === 'loaded') {
         fonts.push(font.family);

@@ -224,7 +224,7 @@ export function getWebGLFingerprint(): WebGLFingerprint {
   const parameters: Record<string, number | string> = {};
   WEBGL_PARAMETERS.forEach((param) => {
     try {
-      const value = gl.getParameter((gl as Record<string, number>)[param]);
+      const value = gl.getParameter((gl as unknown as Record<string, number>)[param]);
       parameters[param] = Array.isArray(value) ? value.join(',') : value;
     } catch {
       parameters[param] = 'error';

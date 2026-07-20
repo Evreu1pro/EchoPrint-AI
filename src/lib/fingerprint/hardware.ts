@@ -24,14 +24,14 @@ function getDeviceMemory(): number | null {
  * Получает информацию об экране
  */
 function getScreenInfo(): HardwareInfo['screen'] {
-  return safeSync(() => ({
+  return safeSync((): HardwareInfo['screen'] => ({
     width: screen.width,
     height: screen.height,
     availWidth: screen.availWidth,
     availHeight: screen.availHeight,
     colorDepth: screen.colorDepth,
     pixelRatio: window.devicePixelRatio || 1,
-    orientation: screen.orientation?.type || null
+    orientation: screen.orientation?.type ?? null,
   }), {
     width: 0,
     height: 0,
@@ -39,7 +39,7 @@ function getScreenInfo(): HardwareInfo['screen'] {
     availHeight: 0,
     colorDepth: 24,
     pixelRatio: 1,
-    orientation: null
+    orientation: null,
   });
 }
 

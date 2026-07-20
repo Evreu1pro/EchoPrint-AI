@@ -101,31 +101,17 @@ const ANOMALY_INDICATORS: Array<{
         evidence.push('navigator.webdriver = true');
       }
       
-      // Дополнительные проверки
       if (typeof window !== 'undefined') {
-        // @ts-expect-error - checking automation APIs
-        if (window.__webdriver_script_fn) {
-          evidence.push('__webdriver_script_fn существует');
-        }
-        // @ts-expect-error - checking automation APIs
-        if (window.__driver_evaluate) {
-          evidence.push('__driver_evaluate существует');
-        }
-        // @ts-expect-error - checking automation APIs
-        if (window.__selenium_evaluate) {
-          evidence.push('__selenium_evaluate существует');
-        }
-        // @ts-expect-error - checking automation APIs
-        if (window.__nightmare) {
-          evidence.push('__nightmare существует');
-        }
-        // @ts-expect-error - checking automation APIs
-        if (window._phantom) {
-          evidence.push('_phantom существует');
-        }
-        // @ts-expect-error - checking automation APIs
-        if (window.callPhantom) {
-          evidence.push('callPhantom существует');
+        const win = window as unknown as Record<string, unknown>;
+        for (const key of [
+          '__webdriver_script_fn',
+          '__driver_evaluate',
+          '__selenium_evaluate',
+          '__nightmare',
+          '_phantom',
+          'callPhantom',
+        ]) {
+          if (win[key] != null) evidence.push(`${key} present`);
         }
       }
       
@@ -174,13 +160,11 @@ const ANOMALY_INDICATORS: Array<{
         evidence.push('PhantomJS User-Agent');
       }
       
-      // Chrome без window.chrome
       const isChrome = ua.includes('chrome');
-      // @ts-expect-error - checking chrome object
       const hasWindowChrome = typeof window !== 'undefined' && 'chrome' in window;
       
       if (isChrome && !hasWindowChrome) {
-        evidence.push('Chrome UA но нет window.chrome объекта');
+        evidence.push('Chrome UA without window.chrome');
       }
       
       // Нет plugins (headless Chrome)
@@ -511,28 +495,28 @@ export function interpretAnomalyScore(score: number): {
 } {
   if (score >= 90) {
     return {
-      level: 'Без аномалий',
-      description: 'Не обнаружено признаков виртуализации, автоматизации или модификации браузера.',
+      level: 'Clean',
+      description: 'No strong signs of virtualization, automation, or fingerprint modification.',
       riskLevel: 'none'
     };
   }
   if (score >= 70) {
     return {
-      level: 'Незначительные аномалии',
-      description: 'Обнаружены некоторые признаки, которые могут быть связаны с особенностями вашего браузера или настроек.',
+      level: 'Minor anomalies',
+      description: 'Soft signals that may be normal browser features or light privacy settings.',
       riskLevel: 'low'
     };
   }
   if (score >= 50) {
     return {
-      level: 'Умеренные аномалии',
-      description: 'Обнаружены признаки, указывающие на возможную модификацию браузера или использование privacy-инструментов.',
+      level: 'Moderate anomalies',
+      description: 'Likely browser modification, privacy tools, or partial spoofing.',
       riskLevel: 'medium'
     };
   }
   return {
-    level: 'Значительные аномалии',
-    description: 'Обнаружены серьёзные признаки виртуализации, автоматизации или модификации. Это может влиять на работу сайтов.',
+    level: 'Significant anomalies',
+    description: 'Strong virtualization, automation, or anti-detect fingerprints — sites may challenge you.',
     riskLevel: 'high'
   };
 }

@@ -577,7 +577,6 @@ const CONSISTENCY_RULES: Array<{
       const ua = data.navigator.userAgent.toLowerCase();
       const isChrome = ua.includes('chrome');
       
-      // @ts-expect-error - checking chrome object
       const hasWindowChrome = typeof window !== 'undefined' && 'chrome' in window;
       
       if (isChrome && !hasWindowChrome) {
@@ -787,28 +786,28 @@ export function interpretConsistencyScore(score: number): {
 } {
   if (score >= 90) {
     return {
-      level: 'Отличная согласованность',
-      description: 'Все параметры вашего устройства логичны и согласованы. Браузер выглядит реалистично.',
+      level: 'Excellent consistency',
+      description: 'Signals agree with each other. The browser looks like a realistic stock environment.',
       riskLevel: 'none'
     };
   }
   if (score >= 75) {
     return {
-      level: 'Хорошая согласованность',
-      description: 'Большинство параметров согласованы. Небольшие несоответствия могут быть связаны с особенностями браузера.',
+      level: 'Good consistency',
+      description: 'Most signals align. Minor mismatches may be normal browser/OS quirks.',
       riskLevel: 'low'
     };
   }
   if (score >= 50) {
     return {
-      level: 'Средняя согласованность',
-      description: 'Обнаружены некоторые несоответствия между параметрами. Это может указывать на использование модифицированного браузера или VPN.',
+      level: 'Moderate consistency',
+      description: 'Several cross-signal mismatches — common with VPN, spoofing extensions, or mixed locales.',
       riskLevel: 'medium'
     };
   }
   return {
-    level: 'Низкая согласованность',
-    description: 'Обнаружены серьёзные несоответствия. Это может указывать на виртуализацию, эмуляцию или использование anti-fingerprinting инструментов.',
+    level: 'Poor consistency',
+    description: 'Serious contradictions (UA/GPU/touch/timezone). Typical of anti-detect stacks or broken spoofing.',
     riskLevel: 'high'
   };
 }

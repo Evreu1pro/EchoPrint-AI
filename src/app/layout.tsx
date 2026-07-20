@@ -1,11 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
 });
 
 const geistMono = Geist_Mono({
@@ -14,23 +14,38 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EchoPrint AI — Анализатор уникальности устройства",
-  description: "Образовательный AI-инструмент для анализа fingerprint браузера. Узнайте, насколько ваше устройство уникально в интернете и получите рекомендации по приватности.",
-  keywords: ["fingerprint", "browser fingerprint", "privacy", "анонимность", "browser security", "webgl", "canvas fingerprint", "device profiling", "цифровой отпечаток"],
-  authors: [{ name: "EchoPrint AI Team" }],
-  icons: {
-    icon: "/favicon.ico",
-  },
+  title: "EchoPrint AI — Browser fingerprint integrity lab",
+  description:
+    "Client-side educational scanner for browser uniqueness, spoof/integrity detection, and tracker exposure. No data leaves your device.",
+  keywords: [
+    "browser fingerprint",
+    "canvas fingerprint",
+    "webgl fingerprint",
+    "privacy",
+    "anti-detect",
+    "tracker exposure",
+    "device integrity",
+  ],
+  authors: [{ name: "EchoPrint AI" }],
   openGraph: {
-    title: "EchoPrint AI — Анализатор уникальности устройства",
-    description: "Узнайте, насколько ваше устройство уникально в интернете. Полностью приватный анализ в браузере.",
+    title: "EchoPrint AI — Browser fingerprint integrity lab",
+    description:
+      "Measure uniqueness, integrity (spoof noise), and tracker exposure — fully in your browser.",
     type: "website",
+    url: "https://echo-print-ai.vercel.app",
   },
   twitter: {
     card: "summary_large_image",
     title: "EchoPrint AI",
-    description: "Анализатор уникальности и реалистичности браузера",
+    description: "Browser fingerprint integrity lab",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#070a0e",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -39,14 +54,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" suppressHydrationWarning>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-        <meta name="theme-color" content="#7c3aed" />
-        <meta name="color-scheme" content="light dark" />
-      </head>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} min-h-screen antialiased bg-[#070a0e] text-zinc-100`}
       >
         {children}
         <Toaster />

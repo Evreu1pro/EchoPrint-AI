@@ -52,8 +52,14 @@ async function getUserAgentData(): Promise<NavigatorInfo['userAgentData']> {
   try {
     const uaData = nav.userAgentData;
     
-    // Пытаемся получить high entropy значения
-    let highEntropy = null;
+    let highEntropy: {
+      architecture?: string;
+      bitness?: string;
+      fullVersionList?: { brand: string; version: string }[];
+      model?: string;
+      platformVersion?: string;
+      uaFullVersion?: string;
+    } | null = null;
     if (uaData.getHighEntropyValues) {
       try {
         highEntropy = await uaData.getHighEntropyValues([
@@ -65,7 +71,7 @@ async function getUserAgentData(): Promise<NavigatorInfo['userAgentData']> {
           'uaFullVersion'
         ]);
       } catch {
-        // High entropy values могут быть недоступны
+        // High-entropy Client Hints may be denied
       }
     }
 
@@ -217,50 +223,24 @@ export function detectAutomation(): {
 } {
   const indicators: string[] = [];
 
-  // Проверка webdriver
   if (navigator.webdriver) {
     indicators.push('webdriver flag is true');
   }
 
-  // Проверка __webdriver_script_fn
-  // @ts-expect-error - checking automation API
-  if (window.__webdriver_script_fn) {
-    indicators.push('__webdriver_script_fn exists');
+  const win = window as unknown as Record<string, unknown>;
+  for (const key of [
+    '__webdriver_script_fn',
+    '__driver_evaluate',
+    '__selenium_evaluate',
+    '__nightmare',
+    '_phantom',
+    'callPhantom',
+  ]) {
+    if (win[key] != null) indicators.push(`${key} exists`);
   }
 
-  // Проверка __driver_evaluate
-  // @ts-expect-error - checking automation API
-  if (window.__driver_evaluate) {
-    indicators.push('__driver_evaluate exists');
-  }
-
-  // Проверка __selenium_evaluate
-  // @ts-expect-error - checking automation API
-  if (window.__selenium_evaluate) {
-    indicators.push('__selenium_evaluate exists');
-  }
-
-  // Проверка __nightmare
-  // @ts-expect-error - checking automation API
-  if (window.__nightmare) {
-    indicators.push('__nightmare exists');
-  }
-
-  // Проверка _phantom
-  // @ts-expect-error - checking automation API
-  if (window._phantom) {
-    indicators.push('_phantom exists');
-  }
-
-  // Проверка callPhantom
-  // @ts-expect-error - checking automation API
-  if (window.callPhantom) {
-    indicators.push('callPhantom exists');
-  }
-
-  // Проверкаcdc_.* (ChromeDriver)
-  for (const key in window) {
-    if (key.startsWith('cdc_')) {
+  for (const key of Object.getOwnPropertyNames(window)) {
+    if (key.startsWith('cdc_') || key.startsWith('wdc_')) {
       indicators.push(`ChromeDriver variable: ${key}`);
     }
   }
@@ -296,15 +276,12 @@ export function detectHeadless(): {
     indicators.push('webdriver enabled');
   }
 
-  // Chrome specific
-  // @ts-expect-error - checking chrome object
-  if (!window.chrome && /Chrome/.test(navigator.userAgent)) {
+  if (!('chrome' in window) && /Chrome/.test(navigator.userAgent)) {
     indicators.push('Chrome UA but no window.chrome');
   }
 
   // Permissions API check
   // Headless browsers may have different permissions behavior
-  // @ts-expect-error - checking permissions
   if (navigator.permissions && /Chrome/.test(navigator.userAgent)) {
     // This is async, so we skip it here
   }

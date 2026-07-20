@@ -76,7 +76,6 @@ function checkPDFViewer(): boolean {
  */
 function checkJava(): boolean | null {
   return safeSync(() => {
-    // @ts-expect-error - deprecated API
     return navigator.javaEnabled?.() ?? null;
   }, null);
 }
@@ -237,14 +236,14 @@ export function getPerformanceInfo(): {
   // Memory info (Chrome only)
   let memory: { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number } | null = null;
   try {
-    // @ts-expect-error - memory API
-    if ((globalThis.performance as Record<string, unknown>).memory) {
-      // @ts-expect-error - memory API
-      const perfMemory = (globalThis.performance as Record<string, Record<string, number>>).memory;
+    const perfAny = globalThis.performance as unknown as {
+      memory?: { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number };
+    };
+    if (perfAny.memory) {
       memory = {
-        usedJSHeapSize: perfMemory.usedJSHeapSize,
-        totalJSHeapSize: perfMemory.totalJSHeapSize,
-        jsHeapSizeLimit: perfMemory.jsHeapSizeLimit
+        usedJSHeapSize: perfAny.memory.usedJSHeapSize,
+        totalJSHeapSize: perfAny.memory.totalJSHeapSize,
+        jsHeapSizeLimit: perfAny.memory.jsHeapSizeLimit,
       };
     }
   } catch {

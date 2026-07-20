@@ -60,9 +60,7 @@ function checkCookiesEnabled(): boolean {
  */
 async function getStorageQuota(): Promise<number | null> {
   try {
-    // @ts-expect-error - storage API may not exist
     if (navigator.storage && navigator.storage.estimate) {
-      // @ts-expect-error - storage API
       const estimate = await navigator.storage.estimate();
       return estimate.quota || null;
     }
@@ -118,14 +116,10 @@ export function detectPrivateMode(): {
 } {
   const indicators: string[] = [];
   
-  // Проверка filesystem API (Chrome)
-  // @ts-expect-error - checking webkit filesystem
-  if (window.webkitRequestFileSystem) {
-    // В приватном режиме этот API недоступен
-    // Это асинхронная проверка, пропускаем здесь
-  }
+  const win = window as unknown as Record<string, unknown>;
+  void win.webkitRequestFileSystem;
+  void win.requestFileSystem;
 
-  // Проверка localStorage в Safari
   try {
     if (typeof localStorage === 'object') {
       try {
@@ -139,19 +133,10 @@ export function detectPrivateMode(): {
     indicators.push('localStorage not available');
   }
 
-  // Проверка IndexedDB в Firefox
   try {
-    if (window.indexedDB) {
-      // В приватном режиме Firefox IndexedDB может быть недоступен
-    }
+    void window.indexedDB;
   } catch {
     indicators.push('IndexedDB not available');
-  }
-
-  // Проверка requestFileSystem
-  // @ts-expect-error - checking requestFileSystem
-  if (typeof window.requestFileSystem === 'function') {
-    // Может быть недоступен в приватном режиме
   }
 
   return {
@@ -170,9 +155,7 @@ export async function getStorageUsage(): Promise<{
   percentage: number;
 } | null> {
   try {
-    // @ts-expect-error - storage API
     if (navigator.storage && navigator.storage.estimate) {
-      // @ts-expect-error - storage API
       const estimate = await navigator.storage.estimate();
       return {
         usage: estimate.usage || 0,

@@ -115,8 +115,10 @@ const CANVAS_TESTS: CanvasTest[] = [
       patternCtx.fillRect(5, 5, 5, 5);
       
       const pattern = ctx.createPattern(patternCanvas, 'repeat');
-      ctx.fillStyle = pattern;
-      ctx.fillRect(0, 0, 150, 100);
+      if (pattern) {
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, 150, 100);
+      }
       
       // Тень
       ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';

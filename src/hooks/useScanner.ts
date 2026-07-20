@@ -1,18 +1,17 @@
 // ============================================================
-// EchoPrint AI - Scanner Hook
-// React hook для управления процессом сканирования
+// EchoPrint AI v2 — Scanner hook
 // ============================================================
 
 import { useState, useCallback } from 'react';
 import { collectFingerprint, type ProgressCallback } from '@/lib/fingerprint/collector';
-import { analyzeFingerprint } from '@/lib/analysis/report';
-import type { FingerprintData, AnalysisResult, ScanProgress } from '@/lib/types';
+import { analyzeFingerprint, type FullAnalysisResult } from '@/lib/analysis/report';
+import type { FingerprintData, ScanProgress } from '@/lib/types';
 
 interface UseScannerResult {
   isScanning: boolean;
   progress: ScanProgress | null;
   fingerprintData: FingerprintData | null;
-  analysisResult: AnalysisResult | null;
+  analysisResult: FullAnalysisResult | null;
   error: string | null;
   startScan: () => Promise<void>;
   resetScan: () => void;
@@ -22,7 +21,7 @@ export function useScanner(): UseScannerResult {
   const [isScanning, setIsScanning] = useState(false);
   const [progress, setProgress] = useState<ScanProgress | null>(null);
   const [fingerprintData, setFingerprintData] = useState<FingerprintData | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<FullAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleProgress: ProgressCallback = useCallback((newProgress) => {
@@ -37,20 +36,30 @@ export function useScanner(): UseScannerResult {
     setAnalysisResult(null);
 
     try {
-      // Собираем fingerprint
       const data = await collectFingerprint(handleProgress);
       setFingerprintData(data);
 
-      // Анализируем
-      const analysis = analyzeFingerprint(data);
+      setProgress({
+        stage: 'Integrity multi-sample',
+        progress: 92,
+        currentSignal: 'Canvas / Audio stability',
+        signalsCollected: 15,
+        totalSignals: 16,
+      });
+
+      const analysis = await analyzeFingerprint(data);
       setAnalysisResult(analysis);
 
+      setProgress({
+        stage: 'Complete',
+        progress: 100,
+        currentSignal: 'Done',
+        signalsCollected: 16,
+        totalSignals: 16,
+      });
     } catch (err) {
       console.error('Scanner error:', err);
-      const errorMessage = err instanceof Error 
-        ? err.message 
-        : 'Произошла ошибка при сканировании';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Scan failed');
     } finally {
       setIsScanning(false);
     }
@@ -71,6 +80,6 @@ export function useScanner(): UseScannerResult {
     analysisResult,
     error,
     startScan,
-    resetScan
+    resetScan,
   };
 }

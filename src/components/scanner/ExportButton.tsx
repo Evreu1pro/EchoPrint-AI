@@ -1,41 +1,51 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { 
-  Download, 
-  FileJson, 
-  Copy,
-  Check
-} from "lucide-react";
+import { Download, Copy, Check } from "lucide-react";
 import { useState } from "react";
-import type { FingerprintData, AnalysisResult, ExportReport } from "@/lib/types";
+import type { FingerprintData } from "@/lib/types";
+import type { FullAnalysisResult } from "@/lib/analysis/report";
 
 interface ExportButtonProps {
   fingerprintData: FingerprintData;
-  analysisResult: AnalysisResult;
+  analysisResult: FullAnalysisResult;
+  label?: string;
 }
 
-export function ExportButton({ fingerprintData, analysisResult }: ExportButtonProps) {
+export function ExportButton({
+  fingerprintData,
+  analysisResult,
+  label = "Export JSON",
+}: ExportButtonProps) {
   const [copied, setCopied] = useState(false);
 
-  const generateReport = (): ExportReport => {
-    return {
-      version: "1.0.0",
-      generatedAt: new Date().toISOString(),
-      fingerprint: fingerprintData,
-      analysis: analysisResult,
-      disclaimer: "Этот отчёт сгенерирован EchoPrint AI для личного использования. Все данные обрабатывались только в вашем браузере."
-    };
-  };
+  const generateReport = () => ({
+    version: "2.0.0",
+    generatedAt: new Date().toISOString(),
+    fingerprint: fingerprintData,
+    analysis: {
+      uniqueness: analysisResult.uniqueness,
+      consistency: analysisResult.consistency,
+      anomaly: analysisResult.anomaly,
+      overallScore: analysisResult.overallScore,
+      privacyRiskLevel: analysisResult.privacyRiskLevel,
+      trackabilityLevel: analysisResult.trackabilityLevel,
+      integrity: analysisResult.integrity,
+      exposure: analysisResult.exposure,
+      aiReport: analysisResult.aiReport,
+    },
+    disclaimer:
+      "Generated client-side by EchoPrint AI for educational / personal use. No data was uploaded.",
+  });
 
   const downloadJSON = () => {
-    const report = generateReport();
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(generateReport(), null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `echoprint-report-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `echoprint-report-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -43,39 +53,20 @@ export function ExportButton({ fingerprintData, analysisResult }: ExportButtonPr
   };
 
   const copyToClipboard = async () => {
-    const report = generateReport();
-    await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+    await navigator.clipboard.writeText(JSON.stringify(generateReport(), null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="flex gap-2">
-      <Button
-        onClick={downloadJSON}
-        variant="outline"
-        className="gap-2"
-      >
-        <Download className="w-4 h-4" />
-        Скачать JSON
+    <div className="flex flex-wrap gap-2">
+      <Button onClick={downloadJSON} variant="outline" className="gap-2 border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800">
+        <Download className="h-4 w-4" />
+        {label}
       </Button>
-      
-      <Button
-        onClick={copyToClipboard}
-        variant="outline"
-        className="gap-2"
-      >
-        {copied ? (
-          <>
-            <Check className="w-4 h-4 text-green-500" />
-            Скопировано
-          </>
-        ) : (
-          <>
-            <Copy className="w-4 h-4" />
-            Копировать
-          </>
-        )}
+      <Button onClick={copyToClipboard} variant="ghost" className="gap-2 text-zinc-400 hover:text-zinc-100">
+        {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+        {copied ? "Copied" : "Copy"}
       </Button>
     </div>
   );

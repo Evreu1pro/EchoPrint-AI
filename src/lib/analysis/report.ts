@@ -1,6 +1,5 @@
 // ============================================================
-// EchoPrint AI - Report Generator
-// Генерация AI-отчёта и рекомендаций на русском языке
+// EchoPrint AI v2 — Analysis orchestrator + report (EN primary)
 // ============================================================
 
 import type { FingerprintData, AnalysisResult, AIReport } from '../types';
@@ -11,48 +10,49 @@ import { detectDevice, type DeviceProfile } from '../fingerprint/device-detector
 import {
   generateDeviceAwareAnalysis,
   type DeviceAwareAnalysis,
-  type DeviceRecommendation
 } from './device-aware-recommendations';
-import { detectTargetTracking, type FullDetectionResult } from '../detection/target-detector';
+import { analyzeIntegrity, type IntegrityReport } from '../engine/integrity';
+import {
+  analyzeExposure,
+  collectPageArtifacts,
+  type ExposureReport,
+} from '../engine/exposure';
 
-/**
- * Определяет уровень риска приватности
- */
+export type FullAnalysisResult = AnalysisResult & {
+  deviceProfile: DeviceProfile;
+  deviceAwareAnalysis: DeviceAwareAnalysis;
+  integrity: IntegrityReport;
+  exposure: ExposureReport;
+  /** @deprecated use exposure — kept for UI compatibility */
+  targetDetection: {
+    results: never[];
+    overallRisk: ExposureReport['overallRisk'];
+    totalRiskScore: number;
+    criticalTargets: never[];
+    allSignals: never[];
+    exposure: ExposureReport;
+  };
+};
+
 function getPrivacyRiskLevel(
   uniquenessScore: number,
   consistencyScore: number,
-  anomalyScore: number
+  integrityScore: number,
+  exposureScore: number
 ): 'very_low' | 'low' | 'medium' | 'high' | 'very_high' {
-  // Высокая уникальность = высокий риск отслеживания
-  // Низкая согласованность = использование privacy инструментов
-  // Аномалии = могут означать защиту или проблемы
+  // High uniqueness + high integrity (native) = easy to track
+  // Low integrity may mean spoof/privacy tools (harder passive tracking, but detectable)
+  const trackEase = uniquenessScore * 0.45 + (100 - exposureScore) * -0.1 + integrityScore * 0.15;
+  const risk = uniquenessScore * 0.5 + exposureScore * 0.35 + (100 - consistencyScore) * 0.15;
 
-  // Если высокая уникальность и хорошая согласованность - высокий риск
-  if (uniquenessScore >= 80 && consistencyScore >= 80) {
-    return 'very_high';
-  }
-
-  // Если средняя уникальность - средний риск
-  if (uniquenessScore >= 60 && consistencyScore >= 70) {
-    return 'high';
-  }
-
-  // Если низкая уникальность или много аномалий (privacy tools) - низкий риск
-  if (uniquenessScore < 40 || anomalyScore < 60) {
-    return 'low';
-  }
-
-  // Если очень низкая уникальность - очень низкий риск
-  if (uniquenessScore < 25) {
-    return 'very_low';
-  }
-
-  return 'medium';
+  if (risk >= 75 && uniquenessScore >= 70) return 'very_high';
+  if (risk >= 60) return 'high';
+  if (risk >= 40) return 'medium';
+  if (risk >= 25) return 'low';
+  void trackEase;
+  return 'very_low';
 }
 
-/**
- * Определяет уровень отслеживаемости
- */
 function getTrackabilityLevel(uniquenessScore: number): 'very_low' | 'low' | 'medium' | 'high' | 'very_high' {
   if (uniquenessScore >= 85) return 'very_high';
   if (uniquenessScore >= 70) return 'high';
@@ -61,89 +61,62 @@ function getTrackabilityLevel(uniquenessScore: number): 'very_low' | 'low' | 'me
   return 'very_low';
 }
 
-/**
- * Генерирует AI-отчёт
- */
+function formatSignalName(signal: string): string {
+  return signal.replace(/_/g, ' ');
+}
+
 function generateAIReport(
   data: FingerprintData,
   uniqueness: ReturnType<typeof analyzeUniqueness>,
   consistency: ReturnType<typeof analyzeConsistency>,
-  anomaly: ReturnType<typeof analyzeAnomalies>
+  anomaly: ReturnType<typeof analyzeAnomalies>,
+  integrity: IntegrityReport,
+  exposure: ExposureReport
 ): AIReport {
-  const uniquenessInterpret = interpretUniquenessScore(uniqueness.overallScore);
-  const consistencyInterpret = interpretConsistencyScore(consistency.overallScore);
-  const anomalyInterpret = interpretAnomalyScore(anomaly.overallScore);
+  const u = interpretUniquenessScore(uniqueness.overallScore);
+  const c = interpretConsistencyScore(consistency.overallScore);
+  const a = interpretAnomalyScore(anomaly.overallScore);
 
-  // Summary
-  let summary = `Ваше устройство "${data.parsedUA.browser.name} ${data.parsedUA.browser.version}" на ${data.parsedUA.os.name} `;
+  let summary = `${data.parsedUA.browser.name} ${data.parsedUA.browser.version} on ${data.parsedUA.os.name}. `;
+  summary += `Uniqueness ${uniqueness.overallScore}/100 (${u.level}). `;
+  summary += `Integrity ${integrity.score}/100 — ${integrity.summary} `;
+  summary += `Exposure risk ${exposure.exposureScore}/100 (${exposure.overallRisk}).`;
 
-  if (uniqueness.overallScore >= 80) {
-    summary += 'имеет очень уникальный цифровой отпечаток. ';
-  } else if (uniqueness.overallScore >= 60) {
-    summary += 'имеет умеренно уникальный цифровой отпечаток. ';
-  } else {
-    summary += 'имеет распространённый цифровой отпечаток. ';
+  let uniquenessAssessment = `${u.level}. ${u.description} `;
+  if (uniqueness.rarestSignals[0]) {
+    uniquenessAssessment += `Rarest signal: ${formatSignalName(uniqueness.rarestSignals[0].signal)} (rarity ${uniqueness.rarestSignals[0].rarity}%). `;
   }
+  uniquenessAssessment += `Population sketch: ${u.populationEstimate}.`;
 
-  summary += `Уровень уникальности: ${uniqueness.overallScore}%. `;
-  summary += `Согласованность параметров: ${consistency.overallScore}%.`;
-
-  // Uniqueness assessment
-  let uniquenessAssessment = `${uniquenessInterpret.level}. `;
-  uniquenessAssessment += uniquenessInterpret.description + ' ';
-
-  if (uniqueness.rarestSignals.length > 0) {
-    const rarest = uniqueness.rarestSignals[0];
-    uniquenessAssessment += `Наиболее редкая характеристика: ${formatSignalName(rarest.signal)} (редкость: ${rarest.rarity}%). `;
-  }
-
-  if (uniqueness.commonSignals.length > 0) {
-    const common = uniqueness.commonSignals[0];
-    uniquenessAssessment += `Наиболее распространённая: ${formatSignalName(common.signal)} (редкость: ${common.rarity}%).`;
-  }
-
-  // Consistency assessment
-  let consistencyAssessment = `${consistencyInterpret.level}. `;
-  consistencyAssessment += consistencyInterpret.description + ' ';
-
-  const failedRules = consistency.rules.filter(r => !r.passed);
-  if (failedRules.length > 0) {
-    consistencyAssessment += `Обнаружено ${failedRules.length} несоответствий. `;
-
-    const criticalIssues = failedRules.filter(r => r.severity === 'critical' || r.severity === 'high');
-    if (criticalIssues.length > 0) {
-      consistencyAssessment += `Критичные: ${criticalIssues.map(r => r.name).join(', ')}.`;
+  let consistencyAssessment = `${c.level}. ${c.description} `;
+  const failed = consistency.rules.filter((r) => !r.passed);
+  if (failed.length) {
+    consistencyAssessment += `${failed.length} failed checks. `;
+    const critical = failed.filter((r) => r.severity === 'critical' || r.severity === 'high');
+    if (critical.length) {
+      consistencyAssessment += `High severity: ${critical.map((r) => r.name).join(', ')}.`;
     }
   } else {
-    consistencyAssessment += 'Все параметры согласованы и логичны.';
+    consistencyAssessment += 'All consistency rules passed.';
   }
 
-  // Anomaly assessment
-  let anomalyAssessment = `${anomalyInterpret.level}. `;
-  anomalyAssessment += anomalyInterpret.description + ' ';
-
-  if (anomaly.detectedAnomalies.length > 0) {
-    const groupedByType = anomaly.detectedAnomalies.reduce((acc, a) => {
-      acc[a.type] = (acc[a.type] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    if (groupedByType['virtualization']) {
-      anomalyAssessment += `Признаки виртуализации: ${groupedByType['virtualization']}. `;
-    }
-    if (groupedByType['automation']) {
-      anomalyAssessment += `Признаки автоматизации: ${groupedByType['automation']}. `;
-    }
-    if (groupedByType['modification']) {
-      anomalyAssessment += `Признаки модификации: ${groupedByType['modification']}. `;
-    }
+  let anomalyAssessment = `${a.level}. ${a.description} `;
+  if (integrity.findings.length) {
+    anomalyAssessment += `Integrity findings: ${integrity.findings
+      .slice(0, 3)
+      .map((f) => f.title)
+      .join('; ')}.`;
+  }
+  if (!integrity.canvasStable) {
+    anomalyAssessment += ' Canvas hashes unstable across samples (noise injection).';
   }
 
-  // Recommendations
-  const recommendations = generateRecommendations(data, uniqueness, consistency, anomaly);
+  const recommendations = [
+    ...exposure.recommendations,
+    ...generateRecommendations(data, uniqueness, consistency, anomaly, integrity),
+  ].slice(0, 8);
 
-  // Privacy tips
-  const privacyTips = generatePrivacyTips(data, uniqueness, consistency, anomaly);
+  const privacyTips = generatePrivacyTips(data, uniqueness, integrity, exposure);
 
   return {
     summary,
@@ -151,150 +124,78 @@ function generateAIReport(
     consistencyAssessment,
     anomalyAssessment,
     recommendations,
-    privacyTips
+    privacyTips,
   };
 }
 
-/**
- * Форматирует имя сигнала для русского языка
- */
-function formatSignalName(signal: string): string {
-  const names: Record<string, string> = {
-    'canvas_text': 'Canvas текст',
-    'canvas_geometry': 'Canvas геометрия',
-    'canvas_gradient': 'Canvas градиент',
-    'webgl_vendor': 'WebGL vendor',
-    'webgl_renderer': 'GPU renderer',
-    'webgl_extensions': 'WebGL расширения',
-    'audio_hash': 'Audio fingerprint',
-    'fonts_count': 'Количество шрифтов',
-    'screen_resolution': 'Разрешение экрана',
-    'hardware_concurrency': 'Ядра процессора',
-    'device_memory': 'Объём памяти',
-    'pixel_ratio': 'Pixel ratio',
-    'color_depth': 'Глубина цвета',
-    'platform': 'Платформа',
-    'language': 'Язык',
-    'timezone': 'Часовой пояс',
-    'browser_name': 'Браузер',
-    'browser_version': 'Версия браузера',
-    'max_touch_points': 'Touch points',
-    'webrtc_local_ips': 'WebRTC IP',
-    'cameras': 'Камеры',
-    'fpjs_visitor_id': 'FingerprintJS ID'
-  };
-
-  return names[signal] || signal;
-}
-
-/**
- * Генерирует рекомендации
- */
 function generateRecommendations(
   data: FingerprintData,
   uniqueness: ReturnType<typeof analyzeUniqueness>,
   consistency: ReturnType<typeof analyzeConsistency>,
-  anomaly: ReturnType<typeof analyzeAnomalies>
+  anomaly: ReturnType<typeof analyzeAnomalies>,
+  integrity: IntegrityReport
 ): string[] {
-  const recommendations: string[] = [];
+  const out: string[] = [];
 
-  // На основе уникальности
   if (uniqueness.overallScore >= 80) {
-    recommendations.push('Ваше устройство очень уникально. Для повышения приватности рассмотрите использование браузера с anti-fingerprinting.');
-    recommendations.push('Измените настройки экрана на более распространённые (например, 1920x1080).');
-  } else if (uniqueness.overallScore < 30) {
-    recommendations.push('Ваше устройство похоже на многие другие. Это хорошо для приватности.');
-    recommendations.push('Если нужна большая уникальность (например, для тестирования), установите дополнительные шрифты.');
+    out.push('Your fingerprint is highly unique — use a privacy-focused browser or reduce custom fonts/plugins.');
   }
-
-  // На основе согласованности
-  const failedCritical = consistency.rules.filter(r => !r.passed && r.severity === 'critical');
-  if (failedCritical.length > 0) {
-    recommendations.push('Критичные несоответствия в fingerprint могут вызывать проблемы на некоторых сайтах. Проверьте настройки браузера.');
+  if (integrity.spoofProbability > 0.45) {
+    out.push('Integrity engine sees spoof/anti-detect signals. Sites may flag you even if uniqueness is low.');
   }
-
-  // На основе аномалий
-  if (anomaly.virtualizationProbability > 0.5) {
-    recommendations.push('Обнаружены признаки виртуализации. Если вы используете VM, это нормально.');
+  if (integrity.privacyToolProbability > 0.4) {
+    out.push('Privacy hardening detected — good for anonymity; some sites may show CAPTCHAs.');
   }
-
-  if (anomaly.automationProbability > 0.5) {
-    recommendations.push('Обнаружены признаки автоматизации. Это может блокировать некоторые сайты.');
+  if (anomaly.automationProbability > 0.5 || data.navigator.webdriver) {
+    out.push('Automation markers present — expect bot challenges on protected sites.');
   }
-
-  // Браузер-специфичные рекомендации
+  if (data.webrtc.localIPs.length > 0 || data.webrtc.publicIP) {
+    out.push('WebRTC exposed IP candidates — enable WebRTC protection in browser or VPN.');
+  }
+  if (data.fonts.count > 120) {
+    out.push('Large installed font set increases desktop uniqueness.');
+  }
+  if (consistency.criticalIssues?.length) {
+    out.push('Critical consistency failures often mean UA spoofing without matching GPU/touch.');
+  }
   if (data.parsedUA.browser.name === 'Chrome') {
-    recommendations.push('Chrome предоставляет много fingerprint-данных. Рассмотрите Firefox или Brave для лучшей приватности.');
+    out.push('Chromium exposes rich Client Hints + WebGL — consider Firefox, Brave, or Mullvad Browser for lower surface.');
   }
 
-  if (data.parsedUA.browser.name === 'Firefox') {
-    recommendations.push('Firefox имеет встроенную защиту от fingerprinting. Включите Resist Fingerprinting в about:config для максимальной защиты.');
-  }
-
-  if (data.parsedUA.browser.name === 'Brave') {
-    recommendations.push('Brave имеет отличную встроенную защиту от fingerprinting. Ваша приватность на высоком уровне.');
-  }
-
-  // WebRTC leak
-  if (data.webrtc.localIPs.length > 0) {
-    recommendations.push('WebRTC утечка IP: рассмотрите установку расширения для блокировки WebRTC или отключение в настройках браузера.');
-  }
-
-  // Количество шрифтов
-  if (data.fonts.count > 200) {
-    recommendations.push('Большое количество шрифтов увеличивает уникальность. Для приватности используйте стандартный набор.');
-  }
-
-  return recommendations.slice(0, 6); // Максимум 6 рекомендаций
+  return out;
 }
 
-/**
- * Генерирует советы по приватности
- */
 function generatePrivacyTips(
   data: FingerprintData,
   uniqueness: ReturnType<typeof analyzeUniqueness>,
-  consistency: ReturnType<typeof analyzeConsistency>,
-  anomaly: ReturnType<typeof analyzeAnomalies>
+  integrity: IntegrityReport,
+  exposure: ExposureReport
 ): string[] {
-  const tips: string[] = [];
-
-  // Общие советы
-  tips.push('Регулярно обновляйте браузер - новые версии часто улучшают защиту.');
-  tips.push('Используйте приватный режим для чувствительного просмотра.');
-
-  // На основе текущего состояния
-  if (uniqueness.overallScore > 70) {
-    tips.push('Установите расширение для randomization fingerprint (например, Canvas Defender).');
+  const tips = [
+    'Prefer strict tracking protection and total cookie protection (or site containers).',
+    'Keep language, timezone, and VPN region aligned to avoid looking spoofed.',
+    'Update the browser regularly — fingerprint mitigations improve over time.',
+  ];
+  if (uniqueness.overallScore > 65) {
+    tips.push('Avoid rare screen scales and custom fonts if you want to blend in.');
   }
-
-  if (data.webrtc.localIPs.length > 0) {
-    tips.push('Используйте VPN с защитой от WebRTC утечек.');
+  if (exposure.exposedCount > 8) {
+    tips.push('Many fingerprint APIs are available — a hardened browser reduces the set at once.');
   }
-
-  // Браузер-специфичные советы
+  if (!integrity.canvasStable) {
+    tips.push('Canvas noise can help against static IDs but itself is a detectable signal.');
+  }
   if (data.parsedUA.browser.name === 'Firefox') {
-    tips.push('В about:config установите privacy.resistFingerprinting = true для максимальной защиты.');
-    tips.push('Установите extensions.pocket.enabled = false для уменьшения fingerprint.');
+    tips.push('Firefox: privacy.resistFingerprinting and letterboxing reduce cross-site linkability.');
   }
-
-  if (data.parsedUA.browser.name === 'Chrome') {
-    tips.push('Рассмотрите переход на Brave или Firefox для лучшей приватности.');
-    tips.push('Установите расширение uBlock Origin для блокировки трекеров.');
-  }
-
-  // Для продвинутых пользователей
-  tips.push('Используйте Tor Browser для анонимного просмотра (максимальная защита).');
-  tips.push('Рассмотрите использование контейнеров (Firefox) для изоляции сайтов.');
-
-  return tips.slice(0, 5); // Максимум 5 советов
+  tips.push('Tor Browser remains the gold standard for anonymity (slower, some site breakage).');
+  return tips.slice(0, 6);
 }
 
 /**
- * Основная функция анализа
+ * Full async analysis (integrity needs multi-sample delays)
  */
-export function analyzeFingerprint(data: FingerprintData): AnalysisResult {
-  // 1. Определение устройства
+export async function analyzeFingerprint(data: FingerprintData): Promise<FullAnalysisResult> {
   const deviceProfile = detectDevice(
     data.navigator.userAgent,
     data.navigator.platform,
@@ -302,94 +203,83 @@ export function analyzeFingerprint(data: FingerprintData): AnalysisResult {
     {
       width: data.hardware.screen.width,
       height: data.hardware.screen.height,
-      pixelRatio: data.hardware.screen.pixelRatio
+      pixelRatio: data.hardware.screen.pixelRatio,
     },
     data.hardware,
     data.navigator
   );
 
-  // 2. Device-aware анализ
   const deviceAwareAnalysis = generateDeviceAwareAnalysis(data, deviceProfile);
-
-  // 3. Базовый анализ
   const uniqueness = analyzeUniqueness(data);
   const consistency = analyzeConsistency(data);
   const anomaly = analyzeAnomalies(data);
+  const integrity = await analyzeIntegrity(data);
+  const exposure = analyzeExposure(data, collectPageArtifacts());
 
-  // 4. Target Detection
-  const targetDetection = detectTargetTracking(data);
+  // Blend anomaly with integrity (lower integrity → lower anomaly "clean" score)
+  const blendedAnomalyScore = Math.round(anomaly.overallScore * 0.55 + integrity.score * 0.45);
 
-  // 5. Общий score - средневзвешенное
   const overallScore = Math.round(
-    uniqueness.overallScore * 0.4 +
-    consistency.overallScore * 0.35 +
-    anomaly.overallScore * 0.25
+    (100 - uniqueness.overallScore) * 0.28 + // lower uniqueness better for privacy posture
+      consistency.overallScore * 0.22 +
+      integrity.score * 0.28 +
+      (100 - exposure.exposureScore) * 0.22
   );
 
-  // 6. Privacy Risk Level (с учётом target detection)
-  let privacyRiskLevel = getPrivacyRiskLevel(
+  const privacyRiskLevel = getPrivacyRiskLevel(
     uniqueness.overallScore,
     consistency.overallScore,
-    anomaly.overallScore
+    integrity.score,
+    exposure.exposureScore
   );
 
-  // Повышаем уровень риска если обнаружены критические трекеры
-  if (targetDetection.overallRisk === 'CRITICAL' || targetDetection.criticalTargets.length > 0) {
-    if (privacyRiskLevel !== 'very_high') {
-      privacyRiskLevel = privacyRiskLevel === 'very_low' ? 'medium' :
-        privacyRiskLevel === 'low' ? 'high' : 'very_high';
-    }
-  }
-
-  // 7. Trackability Level
   const trackabilityLevel = getTrackabilityLevel(uniqueness.overallScore);
 
-  // 8. AI Report
-  const aiReport = generateAIReport(data, uniqueness, consistency, anomaly);
+  const aiReport = generateAIReport(data, uniqueness, consistency, anomaly, integrity, exposure);
 
-  // 9. Добавляем device-specific и target-specific рекомендации в AI report
   const enhancedAiReport: AIReport = {
     ...aiReport,
     recommendations: [
-      ...deviceAwareAnalysis.recommendations.slice(0, 3).map((r: DeviceRecommendation) =>
-        `[${r.priority.toUpperCase()}] ${r.title}: ${r.description}${r.action ? ` ${r.action}` : ''}`
+      ...deviceAwareAnalysis.recommendations.slice(0, 2).map(
+        (r) => `[${r.priority.toUpperCase()}] ${r.title}: ${r.description}`
       ),
-      ...targetDetection.results.slice(0, 2).flatMap(r => r.recommendations.slice(0, 2)),
-      ...aiReport.recommendations
-    ]
+      ...aiReport.recommendations,
+    ].slice(0, 8),
   };
 
   return {
     uniqueness,
     consistency,
-    anomaly,
-    overallScore,
+    anomaly: {
+      ...anomaly,
+      overallScore: blendedAnomalyScore,
+    },
+    overallScore: Math.max(0, Math.min(100, overallScore)),
     privacyRiskLevel,
     trackabilityLevel,
     aiReport: enhancedAiReport,
-    // Добавляем device profile
     deviceProfile,
     deviceAwareAnalysis,
-    // Добавляем target detection
-    targetDetection
-  } as AnalysisResult & {
-    deviceProfile: DeviceProfile;
-    deviceAwareAnalysis: DeviceAwareAnalysis;
-    targetDetection: FullDetectionResult;
+    integrity,
+    exposure,
+    targetDetection: {
+      results: [],
+      overallRisk: exposure.overallRisk,
+      totalRiskScore: exposure.exposureScore,
+      criticalTargets: [],
+      allSignals: [],
+      exposure,
+    },
   };
 }
 
-/**
- * Формирует полное описание уровня риска
- */
 export function getRiskLevelDescription(level: string): string {
   const descriptions: Record<string, string> = {
-    'very_low': 'Очень низкий риск - ваше устройство практически невозможно отследить',
-    'low': 'Низкий риск - отслеживание затруднено',
-    'medium': 'Средний риск - частичное отслеживание возможно',
-    'high': 'Высокий риск - вас легко идентифицировать',
-    'very_high': 'Очень высокий риск - ваше устройство уникально и легко отслеживается'
+    very_low: 'Very low risk — hard to single out via passive fingerprinting alone',
+    low: 'Low risk — tracking is limited without logins or cross-site cookies',
+    medium: 'Medium risk — partial re-identification is realistic',
+    high: 'High risk — fingerprint is distinctive and APIs are exposed',
+    very_high: 'Very high risk — unique traits + rich exposure surface',
   };
-
-  return descriptions[level] || 'Неизвестный уровень';
+  return descriptions[level] || 'Unknown';
 }
