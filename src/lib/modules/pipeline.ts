@@ -8,6 +8,7 @@ import { buildIpHistory } from '@/lib/history/ip-history';
 import { collectModule2 } from './m2-hardware/collect';
 import { collectModule3 } from './m3-software/collect';
 import { collectModule5 } from './m5-advanced/collect';
+import { collectModule7 } from './m7-adtech/collect';
 import { computeModule4 } from './m4-scoring/scores';
 
 export type ProgressFn = (stage: string, pct: number) => void;
@@ -150,6 +151,14 @@ export async function runFullModulePipeline(
   onProgress?.('Advanced (M5): temporal ID, emoji, VM', 80);
   const m5 = collectModule5(m2);
 
+  onProgress?.('AdTech lab (M7): Privacy Sandbox, Meta pixel, tracker radar', 86);
+  let m7;
+  try {
+    m7 = await collectModule7(m1, m2);
+  } catch {
+    m7 = undefined; // never let the ad-tech lab break a scan
+  }
+
   onProgress?.('Scoring (M4): A/B/C/D', 92);
   const m4 = computeModule4(m1, m2, m3, m5);
 
@@ -163,5 +172,6 @@ export async function runFullModulePipeline(
     m3,
     m4,
     m5,
+    m7,
   };
 }

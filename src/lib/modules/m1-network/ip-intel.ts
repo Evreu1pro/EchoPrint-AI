@@ -191,9 +191,18 @@ export function classifyIntel(raw: {
   const dbType = asnKindToConnectionType(verdict.kind);
   let type: IpConnectionType;
 
+  const eyeballType = dbType === 'residential' || dbType === 'business' || dbType === 'mobile';
+
   if (isTor) {
     type = 'tor';
     reasons.push('Tor exit signal');
+  } else if (dbType && eyeballType && (raw.vpn || raw.proxy)) {
+    // Known consumer/mobile ASN, yet the provider flags proxy: this is the
+    // classic residential-proxy / mobile-proxy exit pattern.
+    type = 'vpn_suspected';
+    reasons.push(
+      `eyeball ASN (${verdict.record?.name ?? 'known ISP'}) but provider flags proxy/vpn → residential-proxy exit suspected`
+    );
   } else if (dbType) {
     type = raw.vpn && (dbType === 'hosting' || dbType === 'datacenter') ? 'vpn_suspected' : dbType;
   } else if (raw.vpn || raw.proxy) {
@@ -207,7 +216,9 @@ export function classifyIntel(raw: {
     reasons.push('provider flag: mobile carrier');
   } else if (raw.asn) {
     type = 'residential';
-    reasons.push('no ASN-db or keyword match → treated as residential (low confidence)');
+    reasons.push(
+      `${raw.asn} is not in the local ASN database and the org name has no hosting/VPN keywords → assumed consumer line (low confidence; add the ASN to asn-db.ts or set IPINFO_TOKEN to confirm)`
+    );
   } else {
     type = 'unknown';
   }

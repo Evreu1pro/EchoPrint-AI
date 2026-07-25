@@ -159,16 +159,33 @@ async function collectWebGPU() {
     if (!adapter) {
       return { supported: true, adapterInfo: 'no_adapter', featuresHash: null };
     }
-    let info = 'adapter';
+    const features = adapter.features ? Array.from(adapter.features).sort().join(',') : '';
+    const featureList = features ? features.split(',') : [];
+
+    // Chrome 128+ exposes `adapter.info` synchronously; older builds had the
+    // async requestAdapterInfo(). Both are usually redacted, so fall back to
+    // something actually informative instead of the literal string "adapter".
+    let info = '';
     try {
-      if (adapter.requestAdapterInfo) {
+      const syncInfo = (adapter as { info?: Record<string, string> }).info;
+      if (syncInfo && Object.keys(syncInfo).length) {
+        info = JSON.stringify(syncInfo);
+      } else if (adapter.requestAdapterInfo) {
         const i = await adapter.requestAdapterInfo();
-        info = JSON.stringify(i);
+        if (i && Object.keys(i).length) info = JSON.stringify(i);
       }
     } catch {
       info = 'info_denied';
     }
-    const features = adapter.features ? Array.from(adapter.features).sort().join(',') : '';
+    if (!info) {
+      const limits = adapter.limits as Record<string, number> | undefined;
+      const maxTex = limits?.maxTextureDimension2D;
+      const maxBuf = limits?.maxBufferSize;
+      info =
+        `redacted · ${featureList.length} features` +
+        (maxTex ? ` · maxTex2D ${maxTex}` : '') +
+        (maxBuf ? ` · maxBuf ${Math.round(Number(maxBuf) / 1024 / 1024)}MB` : '');
+    }
     return {
       supported: true,
       adapterInfo: info.slice(0, 400),

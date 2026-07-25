@@ -21,6 +21,8 @@ export type AsnKind =
   | 'proxy' // proxy / mobile-proxy reseller
   | 'transit' // tier-1/2 carrier — never end-user
   | 'mobile' // mobile carrier (real eyeball, but mobile)
+  | 'isp' // consumer broadband / DSL / cable — a real eyeball line
+  | 'business' // business access lines (real users, but corporate)
   | 'education';
 
 export interface AsnRecord {
@@ -35,6 +37,76 @@ export interface AsnRecord {
  * that actually show up behind VPNs, proxies and cloud scanners.
  */
 export const ASN_DB: Record<number, AsnRecord> = {
+  // --- Consumer broadband (so "residential" is knowledge, not a fallback) ---
+  // DE
+  57353: { name: 'freenet DLS GmbH', kind: 'isp', note: 'German consumer DSL reseller (freenet/md·net wholesale)' },
+  3320: { name: 'Deutsche Telekom AG', kind: 'isp' },
+  8881: { name: '1&1 Versatel', kind: 'isp' },
+  8422: { name: 'NetCologne', kind: 'isp' },
+  31334: { name: 'Vodafone Kabel Deutschland', kind: 'isp' },
+  6805: { name: 'Telefónica Germany (o2 DSL)', kind: 'isp' },
+  9145: { name: 'EWE TEL', kind: 'isp' },
+  13184: { name: 'HanseNet / Telefónica DE', kind: 'isp' },
+  34086: { name: 'wilhelm.tel', kind: 'isp' },
+  29562: { name: 'Unitymedia / Vodafone DE cable', kind: 'isp' },
+  8767: { name: 'M-net Telekommunikation', kind: 'isp' },
+  25394: { name: 'M-net (business)', kind: 'business' },
+  // AT / CH
+  8412: { name: 'A1 Telekom Austria', kind: 'isp' },
+  6830: { name: 'Liberty Global / UPC', kind: 'isp' },
+  3303: { name: 'Swisscom', kind: 'isp' },
+  6730: { name: 'Sunrise', kind: 'isp' },
+  // Rest of EU
+  12322: { name: 'Free / Proxad (FR)', kind: 'isp' },
+  3215: { name: 'Orange France', kind: 'isp' },
+  5410: { name: 'Bouygues Telecom', kind: 'isp' },
+  2856: { name: 'BT (UK)', kind: 'isp' },
+  5089: { name: 'Virgin Media (UK)', kind: 'isp' },
+  13285: { name: 'TalkTalk / Opal (UK)', kind: 'isp' },
+  3269: { name: 'Telecom Italia', kind: 'isp' },
+  12874: { name: 'Fastweb (IT)', kind: 'isp' },
+  3352: { name: 'Telefónica de España', kind: 'isp' },
+  12430: { name: 'Vodafone España', kind: 'isp' },
+  8708: { name: 'RCS & RDS (RO)', kind: 'isp' },
+  5617: { name: 'Orange Polska', kind: 'isp' },
+  1136: { name: 'KPN (NL)', kind: 'isp' },
+  33915: { name: 'Ziggo (NL)', kind: 'isp' },
+  3243: { name: 'MEO / Altice PT', kind: 'isp' },
+  2119: { name: 'Telenor (NO)', kind: 'isp' },
+  3301: { name: 'Telia Sweden', kind: 'isp' },
+  // RU / UA / CIS
+  12389: { name: 'Rostelecom', kind: 'isp' },
+  8359: { name: 'MTS (fixed)', kind: 'isp' },
+  3216: { name: 'Beeline (fixed)', kind: 'isp' },
+  6849: { name: 'Ukrtelecom', kind: 'isp' },
+  13188: { name: 'Triolan (UA)', kind: 'isp' },
+  // NA
+  7922: { name: 'Comcast Cable', kind: 'isp' },
+  701: { name: 'Verizon (Fios/DSL)', kind: 'isp' },
+  7018: { name: 'AT&T Internet', kind: 'isp' },
+  20115: { name: 'Charter / Spectrum', kind: 'isp' },
+  22773: { name: 'Cox Communications', kind: 'isp' },
+  11351: { name: 'Charter / Spectrum NE', kind: 'isp' },
+  5650: { name: 'Frontier Communications', kind: 'isp' },
+  209: { name: 'CenturyLink / Lumen retail', kind: 'isp' },
+  812: { name: 'Rogers Cable (CA)', kind: 'isp' },
+  577: { name: 'Bell Canada', kind: 'isp' },
+  6327: { name: 'Shaw / Rogers (CA)', kind: 'isp' },
+  // APAC / LATAM
+  4713: { name: 'NTT OCN (JP)', kind: 'isp' },
+  2516: { name: 'KDDI (JP)', kind: 'isp' },
+  17676: { name: 'SoftBank (JP)', kind: 'isp' },
+  4766: { name: 'Korea Telecom', kind: 'isp' },
+  4134: { name: 'Chinanet', kind: 'isp' },
+  4837: { name: 'China Unicom', kind: 'isp' },
+  1221: { name: 'Telstra (AU)', kind: 'isp' },
+  7545: { name: 'TPG (AU)', kind: 'isp' },
+  4230: { name: 'Claro / Embratel (BR)', kind: 'isp' },
+  8151: { name: 'Uninet / Telmex (MX)', kind: 'isp' },
+  9829: { name: 'BSNL (IN)', kind: 'isp' },
+  55836: { name: 'Reliance Jio (IN)', kind: 'isp' },
+  24560: { name: 'Airtel Broadband (IN)', kind: 'isp' },
+
   // --- Datacamp / CDN77 family (the reported false negative) ---
   212238: { name: 'Datacamp Limited', kind: 'cdn', note: 'CDN77 / VPN + mobile-proxy exits (Surfshark, NordVPN)' },
   60068: { name: 'Datacamp Limited', kind: 'cdn', note: 'CDN77 — same operator as AS212238' },
@@ -159,6 +231,11 @@ const ORG_KEYWORDS: Array<[RegExp, AsnKind]> = [
   [/\b(carrier|transit|backbone|cogent|lumen|level ?3|hurricane electric|arelion|telia carrier|zayo)\b/i, 'transit'],
   [/\b(mobile|wireless|cellular|lte|gsm|telecom italia mobile|t-mobile|vodafone|orange|telefonica|beeline|megafon|mts)\b/i, 'mobile'],
   [/\b(university|universit|college|school|academ|education|research and education|renater|jisc|dfn)\b/i, 'education'],
+  // Eyeball-network hints run LAST so hosting/VPN keywords always win.
+  [
+    /\b(dsl|adsl|vdsl|ftth|fttb|fiber|fibre|broadband|breitband|kabel|cable|catv|telekom|deutsche telekom|comcast|spectrum|charter|centurylink|frontier|rostelecom|ukrtelecom|freenet|kpn|swisscom|proxad|virgin media|talktalk|residential (isp|broadband)|isp)\b/i,
+    'isp',
+  ],
 ];
 
 /** Parses "AS212238", "212238", "as212238 Datacamp" → 212238 */
@@ -228,6 +305,10 @@ export function classifyAsn(
     kind === 'hosting' || kind === 'cdn' || kind === 'vpn' || kind === 'proxy' || kind === 'transit';
 
   let scoreBoost = 0;
+  if (kind === 'isp' || kind === 'business' || kind === 'mobile') {
+    // Known eyeball network: VPN score stays at zero on purpose.
+    return { record, kind, isInfrastructure: false, scoreBoost: 0, reasons, confidence };
+  }
   if (kind === 'vpn') scoreBoost = 70;
   else if (kind === 'proxy') scoreBoost = 65;
   else if (kind === 'cdn') scoreBoost = 45;
@@ -246,9 +327,15 @@ export function asnKindToConnectionType(
   | 'datacenter'
   | 'vpn_suspected'
   | 'mobile'
+  | 'residential'
+  | 'business'
   | 'education'
   | null {
   switch (kind) {
+    case 'isp':
+      return 'residential';
+    case 'business':
+      return 'business';
     case 'vpn':
     case 'proxy':
       return 'vpn_suspected';

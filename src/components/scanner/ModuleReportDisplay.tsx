@@ -1,7 +1,12 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { FullModuleReport } from "@/lib/modules/types";
 import type { Locale } from "@/lib/i18n/messages";
+
+// Map and ad-tech lab touch window/document only — keep them out of SSR.
+const M1Map = dynamic(() => import("./M1Map"), { ssr: false });
+const M7TransparencyLab = dynamic(() => import("./M7TransparencyLab"), { ssr: false });
 import {
   Cpu,
   Shield,
@@ -181,7 +186,28 @@ export function ModuleReportDisplay({ report, locale }: Props) {
               <MapPin className="h-3.5 w-3.5" />
               GeoIP vs Timezone
             </p>
-            <MismatchMap {...m1.geoTimezoneMismatch} />
+            <M1Map
+              geo={
+                m1.geoTimezoneMismatch.geoLat !== null && m1.geoTimezoneMismatch.geoLon !== null
+                  ? [m1.geoTimezoneMismatch.geoLat, m1.geoTimezoneMismatch.geoLon]
+                  : null
+              }
+              tz={
+                m1.geoTimezoneMismatch.tzLat !== null && m1.geoTimezoneMismatch.tzLon !== null
+                  ? [m1.geoTimezoneMismatch.tzLat, m1.geoTimezoneMismatch.tzLon]
+                  : null
+              }
+              distanceKm={m1.geoTimezoneMismatch.distanceKm}
+              ru={ru}
+            />
+            <details className="mt-2">
+              <summary className="cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-300">
+                {ru ? "Схематичная версия (без тайлов)" : "Schematic version (no tiles)"}
+              </summary>
+              <div className="mt-2">
+                <MismatchMap {...m1.geoTimezoneMismatch} />
+              </div>
+            </details>
           </div>
           <div className="space-y-2 text-xs text-zinc-400">
             <p>
@@ -372,6 +398,9 @@ export function ModuleReportDisplay({ report, locale }: Props) {
           </ul>
         )}
       </section>
+
+      {/* M7 */}
+      {report.m7 && <M7TransparencyLab m7={report.m7} ru={ru} />}
     </div>
   );
 }
