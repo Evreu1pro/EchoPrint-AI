@@ -182,6 +182,65 @@ export interface Module5Advanced {
   vmProbability: number;
 }
 
+// ============================================================
+// M7 - Data Transparency Lab (ad-tech mirror)
+// ============================================================
+
+export interface SandboxProbe {
+  id: string;
+  label: string;
+  /** API surface exists in this browser */
+  available: boolean;
+  /** open = would answer an advertiser, blocked = refused, empty = callable but no data */
+  status: 'open' | 'blocked' | 'empty' | 'unsupported' | 'error';
+  /** Decoded values (topic labels, available methods, ...) */
+  values: string[];
+  detail: string;
+  /** "Why this matters" explanation shown next to the value */
+  why: string;
+}
+
+export interface MetaSignals {
+  fbqPresent: boolean;
+  pixelIds: string[];
+  fbp: string | null;
+  fbc: string | null;
+  advancedMatchingAttempts: { field: string; reader: string; at: number }[];
+  capiBeacons: number;
+  findings: string[];
+}
+
+export interface RadarEvent {
+  /** ms since the radar started */
+  t: number;
+  /** wall clock HH:MM:SS */
+  clock: string;
+  vendor: string;
+  domain: string;
+  path: string;
+  method: 'GET' | 'POST' | 'script' | 'pixel' | 'beacon' | string;
+  status: 'loaded' | 'blocked' | 'timeout';
+  ms: number | null;
+  /** what this vendor learns if the request goes through */
+  note: string;
+  /** true when EchoPrint fired the request itself as a probe */
+  probe?: boolean;
+}
+
+export interface Module7AdTech {
+  sandbox: SandboxProbe[];
+  meta: MetaSignals;
+  google: { gtmPresent: boolean; gaCookies: string[]; gclid: boolean; findings: string[] };
+  radar: RadarEvent[];
+  vendorsSeen: string[];
+  blockedCount: number;
+  loadedCount: number;
+  /** higher = less leaks out of this browser */
+  transparencyScore: number;
+  wouldKnow: { vendor: string; lines: string[] }[];
+  findings: string[];
+}
+
 export interface FullModuleReport {
   version: '3.0.0';
   generatedAt: string;
@@ -190,4 +249,6 @@ export interface FullModuleReport {
   m3: Module3Software;
   m4: Module4Scores;
   m5: Module5Advanced;
+  /** M7 - ad-tech transparency lab (optional: reports from older versions lack it) */
+  m7?: Module7AdTech;
 }
