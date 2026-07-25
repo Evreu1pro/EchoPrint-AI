@@ -103,6 +103,7 @@ function baseReport(overrides?: {
         score: protection,
         brave: protection > 50,
         rfpCanvasNoise: false,
+        rfpAudioNoise: false,
         gpc: false,
         trackerScriptsBlocked: protection > 50 ? 3 : 0,
         trackerScriptsLoaded: protection > 50 ? 0 : 3,
@@ -122,6 +123,8 @@ function baseReport(overrides?: {
       trackabilityPercent: 70,
       trackabilityNarrative: 'test',
       formulaNotes: [],
+      vulnerabilityNotes: [],
+      recommendations: [],
     },
     m5: {
       temporal: {

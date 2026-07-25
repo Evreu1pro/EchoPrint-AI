@@ -20,7 +20,8 @@ const LS_KEY = 'echoprint_stable_v3';
 interface StoredIdentity {
   stableId?: string;
   browserId?: string;
-  deviceId?: string;
+  // Null when M2 could not derive a cross-browser id (older report shape).
+  deviceId?: string | null;
   components?: Partial<FingerprintComponents>;
   t?: number;
 }
