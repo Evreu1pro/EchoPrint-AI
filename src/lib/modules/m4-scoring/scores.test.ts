@@ -145,8 +145,21 @@ const m5: Module5Advanced = {
 
 describe('computeModule4', () => {
   it('maps uniqueness bits into 0–100', () => {
+    // Uniqueness is scaled against the 24-bit practical ceiling, so use a
+    // sub-ceiling value to exercise the mapping itself.
+    const r = computeModule4(
+      m1Open,
+      { ...m2, entropyBitsEstimate: 18 },
+      m3Open,
+      m5
+    );
+    expect(r.uniqueness).toBe(75); // 18/24 * 100
+    expect(r.uniquenessBits).toBe(18);
+  });
+
+  it('clamps uniqueness at 100 above the 24-bit ceiling', () => {
     const r = computeModule4(m1Open, m2, m3Open, m5);
-    expect(r.uniqueness).toBe(80); // 32/40 * 100
+    expect(r.uniqueness).toBe(100); // 32 bits is past the ceiling
     expect(r.uniquenessBits).toBe(32);
   });
 
