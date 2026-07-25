@@ -190,8 +190,55 @@ export function ModuleReportDisplay({ report, locale }: Props) {
             </p>
             <p>
               <span className="text-zinc-500">ASN:</span> {m1.ipIntel.asn || "—"}{" "}
-              {m1.ipIntel.asOrg || ""}
+              {m1.ipIntel.asnDbName || m1.ipIntel.asOrg || ""}
+              {m1.ipIntel.asnKind ? (
+                <span
+                  className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    m1.ipIntel.asnKind === "vpn" || m1.ipIntel.asnKind === "proxy"
+                      ? "bg-rose-500/15 text-rose-300"
+                      : m1.ipIntel.asnKind === "hosting" ||
+                          m1.ipIntel.asnKind === "cdn" ||
+                          m1.ipIntel.asnKind === "transit"
+                        ? "bg-amber-500/15 text-amber-300"
+                        : "bg-zinc-700/40 text-zinc-300"
+                  }`}
+                >
+                  {m1.ipIntel.asnKind}
+                  {m1.ipIntel.classificationConfidence
+                    ? ` · ${m1.ipIntel.classificationConfidence}`
+                    : ""}
+                </span>
+              ) : null}
             </p>
+            <p className="text-[11px] text-zinc-500">
+              {ru ? "Источник" : "Source"}: {m1.ipIntel.source}
+              {m1.ipIntel.source === "ipwho"
+                ? ru
+                  ? " · для точных privacy-флагов задайте IPINFO_TOKEN"
+                  : " · set IPINFO_TOKEN for ipinfo.io privacy flags"
+                : ""}
+            </p>
+            {m1.ipIntel.classificationReasons?.length ? (
+              <ul className="space-y-0.5 text-[11px] text-zinc-500">
+                {m1.ipIntel.classificationReasons.map((r, i) => (
+                  <li key={i}>· {r}</li>
+                ))}
+              </ul>
+            ) : null}
+            {m1.ipHistory?.summary ? (
+              <div
+                className={`rounded-lg border px-2.5 py-2 text-[11px] ${
+                  m1.ipHistory.ipChanged
+                    ? "border-amber-500/40 bg-amber-500/5 text-amber-200"
+                    : "border-zinc-800 bg-zinc-950/40 text-zinc-400"
+                }`}
+              >
+                <div className="mb-0.5 font-semibold">
+                  {ru ? "История IP" : "IP history"}
+                </div>
+                {m1.ipHistory.summary}
+              </div>
+            ) : null}
             <p>
               <span className="text-zinc-500">JA3:</span>{" "}
               {m1.tls.ja3 || m1.tls.note.slice(0, 80)}
@@ -238,8 +285,38 @@ export function ModuleReportDisplay({ report, locale }: Props) {
             k="Screen"
             v={`${m2.screen.width}×${m2.screen.height} dpr=${m2.screen.devicePixelRatio}`}
           />
-          <Row k="Entropy ~" v={`${m2.entropyBitsEstimate} bits`} />
+          <Row
+            k="Entropy ~"
+            v={`${m2.entropyBitsEstimate} bits${
+              m2.oneInN ? ` · ~1 in ${m2.oneInN.toLocaleString()}` : ""
+            }${m2.entropyCapBits ? ` (cap ${m2.entropyCapBits})` : ""}`}
+          />
         </div>
+        {m2.entropyDetail?.length ? (
+          <details className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 text-xs">
+            <summary className="cursor-pointer text-zinc-300">
+              {ru
+                ? "Как считаются биты (с поправкой на корреляцию)"
+                : "How the bits are counted (correlation-adjusted)"}
+            </summary>
+            <p className="mt-2 text-[11px] text-zinc-500">
+              {ru
+                ? "Canvas, WebGL, WebGPU и шрифты описывают одну и ту же связку GPU+ОС, поэтому их биты нельзя складывать напрямую. Потолок — log2(число устройств в мире) ≈ 33 бита."
+                : "Canvas, WebGL, WebGPU and fonts all describe the same GPU+OS combo, so their bits cannot be summed directly. Ceiling is log2(devices on Earth) ≈ 33 bits."}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {m2.entropyDetail.map((d) => (
+                <li key={d.source} className="flex flex-wrap gap-x-2 text-zinc-400">
+                  <span className="min-w-32 text-zinc-300">{d.source}</span>
+                  <span className="tabular-nums">
+                    {d.rawBits} → {d.countedBits} bits
+                  </span>
+                  {d.note ? <span className="text-zinc-600">{d.note}</span> : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       {/* M3 software */}

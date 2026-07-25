@@ -31,7 +31,15 @@ export interface IpIntel {
   lat: number | null;
   lon: number | null;
   timezone: string | null; // from GeoIP
-  source: 'ip-api' | 'headers' | 'none' | 'error';
+  source: 'ip-api' | 'ipinfo' | 'ipwho' | 'headers' | 'none' | 'error';
+  /** Kind resolved from the local ASN database (hosting/cdn/vpn/proxy/transit/mobile/education). */
+  asnKind?: string | null;
+  /** Operator name from the local ASN database, e.g. "Datacamp Limited". */
+  asnDbName?: string | null;
+  /** high = ASN database hit, medium = org-name keyword, low = guess. */
+  classificationConfidence?: 'high' | 'medium' | 'low';
+  /** Human-readable trail of why this connection type was chosen. */
+  classificationReasons?: string[];
 }
 
 export interface TlsFingerprint {
@@ -58,6 +66,16 @@ export interface Module1Network {
     webrtcPublic: string[];
     webrtcLocal: string[];
     detail: string;
+  };
+  /** Cross-scan network history (same browser, previous IPs). */
+  ipHistory?: {
+    previousIp: string | null;
+    previousAsn: string | null;
+    previousDistanceKm: number | null;
+    ipChanged: boolean;
+    /** Distance between the previous and current GeoIP points, km. */
+    ipMoveKm: number | null;
+    summary: string | null;
   };
   geoTimezoneMismatch: {
     geoLat: number | null;
@@ -103,6 +121,12 @@ export interface Module2Hardware {
   /** Stable across browsers on same machine */
   stableId: string;
   entropyBitsEstimate: number;
+  /** Per-signal entropy contribution after the correlation discount. */
+  entropyDetail?: { source: string; rawBits: number; countedBits: number; note?: string }[];
+  /** Information-theoretic ceiling used when capping the estimate. */
+  entropyCapBits?: number;
+  /** ~1 in N devices share this fingerprint (2^bits, capped by population). */
+  oneInN?: number;
 }
 
 export interface Module3Software {

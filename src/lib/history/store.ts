@@ -21,6 +21,13 @@ export interface ScanHistoryEntry {
     protection: number;
     connectionType: string;
     ip: string | null;
+    /** ASN of the public IP, e.g. "AS212238" (shown in the History IP column). */
+    asn?: string | null;
+    /** Operator name resolved from the local ASN database. */
+    asOrg?: string | null;
+    city?: string | null;
+    /** Geo↔timezone distance for this scan, km. */
+    geoDistanceKm?: number | null;
   };
   report: FullModuleReport;
 }
@@ -47,6 +54,10 @@ function summarize(report: FullModuleReport): ScanHistoryEntry['summary'] {
     protection: report.m3.protection.score,
     connectionType: report.m1.ipIntel.connectionType,
     ip: report.m1.ipIntel.ip,
+    asn: report.m1.ipIntel.asn,
+    asOrg: report.m1.ipIntel.asnDbName || report.m1.ipIntel.asOrg,
+    city: report.m1.ipIntel.city,
+    geoDistanceKm: report.m1.geoTimezoneMismatch.distanceKm,
   };
 }
 

@@ -329,14 +329,7 @@ export async function collectModule2(): Promise<Module2Hardware> {
 
   const stableId = await sha256Hash(raw);
 
-  // rough entropy: GPU heavy + canvas + fonts
-  let bits = 12;
-  if (webgl.renderer !== 'none' && webgl.renderer !== 'unknown') bits += 14;
-  if (canvas.combined !== 'error') bits += 12;
-  if (audio.hash !== 'unsupported') bits += 10;
-  bits += Math.min(12, Math.log2(Math.max(2, fonts.count)));
-  bits += 6; // screen
-  if (webgpu.supported) bits += 4;
+  const entropy = estimateEntropy({ canvas, webgl, webgpu, audio, fonts, screen, math });
 
   return {
     canvas,
@@ -347,6 +340,128 @@ export async function collectModule2(): Promise<Module2Hardware> {
     screen,
     math,
     stableId: stableId.slice(0, 32),
-    entropyBitsEstimate: Math.round(bits * 10) / 10,
+    entropyBitsEstimate: entropy.bits,
+    entropyDetail: entropy.detail,
+    entropyCapBits: entropy.capBits,
+    oneInN: entropy.oneInN,
+  };
+}
+
+// ============================================================
+// Entropy estimation
+// ------------------------------------------------------------
+// The old model just summed per-signal bonuses (12 + 14 + 12 + 10 + …)
+// and produced ~63 bits — physically impossible: 2^63 is a billion
+// times more devices than exist. Two problems were fixed:
+//
+//   1. Correlation. Canvas / WebGL / WebGPU / fonts all leak the same
+//      GPU + OS + driver combination. Their information overlaps, so
+//      each additional signal gets a diminishing weight instead of a
+//      full independent addition.
+//   2. No ceiling. Real-world published measurements (Panopticlick /
+//      AmIUnique / CreepJS) top out around 20–24 bits for a browser
+//      fingerprint, and no fingerprint can beat log2(devices online)
+//      ≈ 33 bits. We cap at that population ceiling.
+// ============================================================
+
+/** log2 of the plausible device population (~8.5e9 devices) ≈ 33 bits. */
+export const ENTROPY_CAP_BITS = 33;
+/** Practical ceiling observed in fingerprinting research. */
+export const ENTROPY_PRACTICAL_CAP_BITS = 24;
+
+export function estimateEntropy(m2: {
+  canvas: { combined: string };
+  webgl: { renderer: string; extensionCount: number };
+  webgpu: { supported: boolean };
+  audio: { hash: string };
+  fonts: { count: number };
+  screen: { width: number; height: number; devicePixelRatio: number; colorDepth: number };
+  math: { hash: string };
+}): {
+  bits: number;
+  capBits: number;
+  oneInN: number;
+  detail: { source: string; rawBits: number; countedBits: number; note?: string }[];
+} {
+  const raw: { source: string; rawBits: number; note?: string }[] = [];
+
+  // GPU renderer string: the single strongest hardware signal.
+  const rendererOk =
+    m2.webgl.renderer !== 'none' && m2.webgl.renderer !== 'unknown' && m2.webgl.renderer !== '';
+  const rendererMasked = /generic|masked|angle \(unknown|software/i.test(m2.webgl.renderer);
+  if (rendererOk) {
+    raw.push({
+      source: 'WebGL renderer',
+      rawBits: rendererMasked ? 4 : 9,
+      note: rendererMasked ? 'renderer masked/generic' : 'GPU + driver string',
+    });
+  }
+
+  // Canvas rendering (text + emoji + curves): overlaps heavily with GPU.
+  if (m2.canvas.combined !== 'error' && m2.canvas.combined !== 'no_ctx') {
+    raw.push({ source: 'Canvas ×3', rawBits: 7, note: 'rasterizer + font stack' });
+  }
+
+  // AudioContext DSP output.
+  if (m2.audio.hash !== 'unsupported' && m2.audio.hash !== 'error') {
+    raw.push({ source: 'AudioContext', rawBits: 5, note: 'DSP + sample rate' });
+  }
+
+  // Installed fonts: log2 of the detected count, realistically capped.
+  if (m2.fonts.count > 0) {
+    raw.push({
+      source: 'Fonts',
+      rawBits: Math.min(6, Math.log2(Math.max(2, m2.fonts.count))),
+      note: `${m2.fonts.count} detected`,
+    });
+  }
+
+  // Screen geometry: common resolutions are shared by millions.
+  const commonRes = new Set(['1920x1080', '1366x768', '2560x1440', '1536x864', '3840x2160']);
+  const resKey = `${m2.screen.width}x${m2.screen.height}`;
+  raw.push({
+    source: 'Screen',
+    rawBits: commonRes.has(resKey) ? 2.5 : 4.5,
+    note: commonRes.has(resKey) ? `${resKey} is a very common resolution` : resKey,
+  });
+
+  // WebGL extension count — mostly determined by the GPU already.
+  if (m2.webgl.extensionCount > 0) {
+    raw.push({ source: 'WebGL extensions', rawBits: 2, note: `${m2.webgl.extensionCount} exts` });
+  }
+
+  if (m2.webgpu.supported) {
+    raw.push({ source: 'WebGPU', rawBits: 1.5, note: 'adapter features' });
+  }
+
+  // Math/JS engine precision: nearly identical across a browser family.
+  raw.push({ source: 'Math / JS engine', rawBits: 0.8 });
+
+  // ---- Correlation discount --------------------------------------------
+  // Strongest signal counts fully, each following signal counts less,
+  // because it mostly re-describes the same GPU/OS/driver combination.
+  const weights = [1, 0.7, 0.55, 0.45, 0.35, 0.3, 0.25, 0.2];
+  const sorted = [...raw].sort((a, b) => b.rawBits - a.rawBits);
+  let total = 0;
+  const detail = sorted.map((entry, i) => {
+    const w = weights[i] ?? 0.15;
+    const counted = Math.round(entry.rawBits * w * 10) / 10;
+    total += counted;
+    return {
+      source: entry.source,
+      rawBits: Math.round(entry.rawBits * 10) / 10,
+      countedBits: counted,
+      note: entry.note ? `${entry.note} · ×${w} correlation weight` : `×${w} correlation weight`,
+    };
+  });
+
+  const capped = Math.min(total, ENTROPY_CAP_BITS);
+  const bits = Math.round(capped * 10) / 10;
+
+  return {
+    bits,
+    capBits: ENTROPY_CAP_BITS,
+    oneInN: Math.round(2 ** bits),
+    detail,
   };
 }

@@ -2,6 +2,7 @@
 
 import type { Locale } from "@/lib/i18n/messages";
 import type { ScanHistoryEntry } from "@/lib/history/store";
+import { shortIp } from "@/lib/history/ip-history";
 import { History, Trash2, GitCompare, Eye } from "lucide-react";
 
 interface Props {
@@ -76,6 +77,15 @@ export function ScanHistoryPanel({
       <ul className="max-h-72 space-y-2 overflow-y-auto">
         {entries.map((e) => {
           const checked = selectedIds.includes(e.id);
+          // Same hardware id on a different IP = the money shot of the whole tool.
+          const sameIdOtherIp = entries.some(
+            (o) =>
+              o.id !== e.id &&
+              o.summary.stableId === e.summary.stableId &&
+              Boolean(o.summary.ip) &&
+              Boolean(e.summary.ip) &&
+              o.summary.ip !== e.summary.ip
+          );
           return (
             <li
               key={e.id}
@@ -105,10 +115,33 @@ export function ScanHistoryPanel({
                   <span>B {e.summary.spoof}</span>
                   <span>C {e.summary.aggressiveness}</span>
                   <span>prot {e.summary.protection}</span>
+                  <span
+                    className={`font-mono ${sameIdOtherIp ? "text-amber-300" : "text-zinc-400"}`}
+                    title={
+                      (e.summary.ip ?? "") +
+                      (e.summary.asn ? ` · ${e.summary.asn} ${e.summary.asOrg ?? ""}` : "") +
+                      (e.summary.city ? ` · ${e.summary.city}` : "")
+                    }
+                  >
+                    IP {shortIp(e.summary.ip)}
+                  </span>
+                  {e.summary.asn ? (
+                    <span className="text-zinc-500">{e.summary.asn}</span>
+                  ) : null}
+                  <span className="text-zinc-500">
+                    Δ {e.summary.geoDistanceKm ?? "—"}km
+                  </span>
                   <span className="truncate font-mono text-[10px] text-zinc-600">
                     {e.summary.stableId.slice(0, 12)}…
                   </span>
                 </div>
+                {sameIdOtherIp ? (
+                  <div className="mt-1 text-[10px] font-medium text-amber-300/90">
+                    {ru
+                      ? "тот же stable_id при другом IP — смена IP не спасла"
+                      : "same stable_id on a different IP — the IP change did not help"}
+                  </div>
+                ) : null}
               </div>
               <div className="flex shrink-0 gap-1">
                 <button

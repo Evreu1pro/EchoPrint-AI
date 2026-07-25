@@ -3,6 +3,8 @@
 // ============================================================
 
 import type { FullModuleReport, Module1Network } from './types';
+import { loadHistory } from '@/lib/history/store';
+import { buildIpHistory } from '@/lib/history/ip-history';
 import { collectModule2 } from './m2-hardware/collect';
 import { collectModule3 } from './m3-software/collect';
 import { collectModule5 } from './m5-advanced/collect';
@@ -127,6 +129,20 @@ export async function runFullModulePipeline(
       userAgent: navigator.userAgent,
       language: navigator.language,
     })) || emptyM1();
+
+  // Cross-scan network history: did the IP move while the hardware stayed?
+  m1.ipHistory = buildIpHistory(
+    {
+      ip: m1.ipIntel.ip,
+      asn: m1.ipIntel.asn,
+      lat: m1.ipIntel.lat,
+      lon: m1.ipIntel.lon,
+      distanceKm: m1.geoTimezoneMismatch.distanceKm,
+      stableId: m2.stableId,
+    },
+    loadHistory()
+  );
+  if (m1.ipHistory.summary) m1.findings.push(m1.ipHistory.summary);
 
   onProgress?.('Software layer (M3): spoof, extensions, protection', 60);
   const m3 = await collectModule3(m2);

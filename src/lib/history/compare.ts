@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { FullModuleReport } from '@/lib/modules/types';
+import { haversineKm } from '@/lib/modules/m1-network/geo-timezone';
 
 export interface ScoreDelta {
   key: string;
@@ -67,6 +68,20 @@ export function compareReports(
       right.m1.ipIntel.connectionType
     ),
     flag('ip', 'Public IP', left.m1.ipIntel.ip, right.m1.ipIntel.ip),
+    flag('asn', 'ASN', left.m1.ipIntel.asn, right.m1.ipIntel.asn),
+    flag(
+      'asnOrg',
+      'ASN operator',
+      left.m1.ipIntel.asnDbName || left.m1.ipIntel.asOrg,
+      right.m1.ipIntel.asnDbName || right.m1.ipIntel.asOrg
+    ),
+    flag('city', 'GeoIP city', left.m1.ipIntel.city, right.m1.ipIntel.city),
+    flag(
+      'geoDistance',
+      'Geo↔tz Δ km',
+      left.m1.geoTimezoneMismatch.distanceKm,
+      right.m1.geoTimezoneMismatch.distanceKm
+    ),
     flag(
       'geoMismatch',
       'Geo↔tz mismatch',
@@ -88,6 +103,52 @@ export function compareReports(
     notes.push('Same hardware stable_id — likely same machine across browsers/sessions.');
   } else {
     notes.push('Different stable_id — different hardware profile or spoofed canvas/WebGL stack.');
+  }
+
+  // --- IP mobility vs hardware persistence -------------------------------
+  const leftIp = left.m1.ipIntel.ip;
+  const rightIp = right.m1.ipIntel.ip;
+  const ipChanged = Boolean(leftIp && rightIp && leftIp !== rightIp);
+
+  const geoMoveKm =
+    left.m1.ipIntel.lat != null &&
+    left.m1.ipIntel.lon != null &&
+    right.m1.ipIntel.lat != null &&
+    right.m1.ipIntel.lon != null
+      ? Math.round(
+          haversineKm(
+            left.m1.ipIntel.lat,
+            left.m1.ipIntel.lon,
+            right.m1.ipIntel.lat,
+            right.m1.ipIntel.lon
+          )
+        )
+      : null;
+
+  if (ipChanged) {
+    const move = geoMoveKm != null ? ` (${geoMoveKm} km apart)` : '';
+    notes.push(
+      sameStableId
+        ? `IP changed ${leftIp} → ${rightIp}${move}, but hardware same — the network switch did not break re-identification.`
+        : `IP changed ${leftIp} → ${rightIp}${move} and stable_id changed too.`
+    );
+    if (left.m1.ipIntel.asn !== right.m1.ipIntel.asn) {
+      notes.push(
+        `ASN ${left.m1.ipIntel.asn || '?'} (${left.m1.ipIntel.asnDbName || left.m1.ipIntel.asOrg || '?'}) → ` +
+          `${right.m1.ipIntel.asn || '?'} (${right.m1.ipIntel.asnDbName || right.m1.ipIntel.asOrg || '?'}); ` +
+          `type ${left.m1.ipIntel.connectionType} → ${right.m1.ipIntel.connectionType}.`
+      );
+    }
+  }
+
+  const leftKm = left.m1.geoTimezoneMismatch.distanceKm;
+  const rightKm = right.m1.geoTimezoneMismatch.distanceKm;
+  if (leftKm != null && rightKm != null && leftKm !== rightKm) {
+    notes.push(
+      rightKm < leftKm
+        ? `Geo jump ${leftKm}km → ${rightKm}km — GeoIP and browser timezone now agree${rightKm === 0 ? ' exactly' : ''}, the path looks like a real local user.`
+        : `Geo jump ${leftKm}km → ${rightKm}km — GeoIP drifted away from the browser timezone.`
+    );
   }
 
   const protDelta = right.m3.protection.score - left.m3.protection.score;

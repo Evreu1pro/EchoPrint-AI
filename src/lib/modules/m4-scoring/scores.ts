@@ -16,18 +16,27 @@ export function computeModule4(
   m3: Module3Software,
   m5: Module5Advanced
 ): Module4Scores {
-  // A — Uniqueness from estimated entropy bits
-  // bits ~ log2(population). Map bits to 0–100
-  const uniquenessBits = m2.entropyBitsEstimate;
-  const uniqueness = Math.min(100, Math.round((uniquenessBits / 40) * 100));
+  // A — Uniqueness from estimated entropy bits.
+  // 24 bits ≈ the practical ceiling measured by Panopticlick/AmIUnique/CreepJS,
+  // so 24+ bits = 100. Anything above 33 bits (log2 of the device population)
+  // is impossible and is clamped upstream in M2.
+  const uniquenessBits = Math.min(m2.entropyBitsEstimate, m2.entropyCapBits ?? 33);
+  const uniqueness = Math.min(100, Math.round((uniquenessBits / 24) * 100));
+  const oneInN = m2.oneInN ?? Math.round(2 ** uniquenessBits);
+  const rarity =
+    oneInN >= 1_000_000
+      ? `~1 in ${(oneInN / 1_000_000).toFixed(1)}M`
+      : oneInN >= 1_000
+        ? `~1 in ${Math.round(oneInN / 1_000)}k`
+        : `~1 in ${oneInN}`;
   const uniquenessLabel =
     uniqueness >= 85
-      ? 'Extremely unique (~1 in millions)'
+      ? `Extremely unique (${rarity} devices)`
       : uniqueness >= 65
-        ? 'Highly unique'
+        ? `Highly unique (${rarity})`
         : uniqueness >= 40
-          ? 'Moderately unique'
-          : 'Common hardware/browser stack';
+          ? `Moderately unique (${rarity})`
+          : `Common hardware/browser stack (${rarity})`;
 
   // B — Spoof / undercover (killer feature)
   // formula: geo-tz mismatch *40 + language issues *30 + datacenter *30 + webrtc + spoof findings
@@ -51,7 +60,22 @@ export function computeModule4(
     m1.ipIntel.isHosting;
   if (dc) {
     spoof += 30;
-    formulaNotes.push('datacenter/hosting IP +30');
+    formulaNotes.push(
+      `datacenter/hosting IP +30 (${m1.ipIntel.asn || '?'} ${m1.ipIntel.asnDbName || m1.ipIntel.asOrg || ''})`.trim()
+    );
+  }
+  if (m1.ipIntel.connectionType === 'vpn_suspected') {
+    spoof += 25;
+    formulaNotes.push(
+      `VPN/proxy ASN +25 (${m1.ipIntel.asn || '?'} ${m1.ipIntel.asnDbName || m1.ipIntel.asOrg || ''})`.trim()
+    );
+  }
+  // Hardware persisted while the network path moved — the strongest
+  // "your IP changed but we still know you" signal.
+  if (m1.ipHistory?.ipChanged) {
+    formulaNotes.push(
+      `IP changed since last scan (${m1.ipHistory.previousIp} → ${m1.ipIntel.ip}) but stable_id held`
+    );
   }
   if (m1.ipIntel.isTor || m1.ipIntel.connectionType === 'tor') {
     spoof += 25;
@@ -141,6 +165,10 @@ export function computeModule4(
 
   if (m5.temporal.sameDeviceDifferentSession) {
     trackabilityNarrative += ` ${m5.temporal.message}`;
+  }
+
+  if (m1.ipHistory?.ipChanged && m1.ipHistory.summary) {
+    trackabilityNarrative += ` ${m1.ipHistory.summary}`;
   }
 
   return {
