@@ -82,6 +82,7 @@ function baseReport(overrides?: {
         colorDepth: 24,
         orientation: null,
         hash: 's',
+        stableHash: 's-stable',
       },
       math: { hash: 'm' },
       stableId: overrides?.stableId ?? 'stable-same',

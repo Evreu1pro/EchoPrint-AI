@@ -2,7 +2,7 @@
   "name": "echoprint-ai",
   "version": "3.0.0",
   "private": true,
-  "description": "Browser fingerprint & exposure lab — M1 network intel, stable_id, A/B/C/D scores, M7 AdTech transparency, local history/compare · Next.js + Vercel",
+  "description": "M1–M5 browser fingerprint lab — network intel, stable_id, spoof/protection scores, local history",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",

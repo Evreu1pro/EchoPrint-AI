@@ -165,13 +165,53 @@ export function ModuleReportDisplay({ report, locale }: Props) {
           <ScoreBar label={`C · ${ru ? "Агрессивность (блок)" : "Aggressiveness"}`} score={m4.aggressiveness} sub={m4.aggressivenessLabel} invert />
           <ScoreBar label={`D · ${ru ? "Уязвимость" : "Vulnerability"}`} score={m4.vulnerability} sub={m4.vulnerabilityLabel} />
         </div>
-        {m4.formulaNotes.length > 0 && (
-          <ul className="mt-3 space-y-1 text-[11px] text-zinc-600">
-            {m4.formulaNotes.map((n, i) => (
-              <li key={i}>· {n}</li>
-            ))}
-          </ul>
+        {(m4.formulaNotes.length > 0 || m4.vulnerabilityNotes?.length) && (
+          <details className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
+            <summary className="cursor-pointer text-xs text-zinc-300">
+              {ru ? "Из чего складываются скоры" : "How these scores add up"}
+            </summary>
+            {m4.formulaNotes.length > 0 && (
+              <>
+                <p className="mt-2 text-[11px] font-semibold text-zinc-400">
+                  B · {ru ? "Подставной" : "Spoof"}
+                </p>
+                <ul className="mt-1 space-y-1 text-[11px] text-zinc-600">
+                  {m4.formulaNotes.map((n, i) => (
+                    <li key={i}>· {n}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {m4.vulnerabilityNotes?.length ? (
+              <>
+                <p className="mt-3 text-[11px] font-semibold text-zinc-400">
+                  D · {ru ? "Уязвимость" : "Vulnerability"}
+                </p>
+                <ul className="mt-1 space-y-1 text-[11px] text-zinc-600">
+                  {m4.vulnerabilityNotes.map((n, i) => (
+                    <li key={i}>· {n}</li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </details>
         )}
+
+        {m4.recommendations?.length ? (
+          <div className="mt-3 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+              {ru ? "Что с этим делать" : "What to do about it"}
+            </p>
+            <ul className="mt-2 space-y-1.5 text-xs leading-relaxed text-zinc-300">
+              {m4.recommendations.map((r, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-emerald-400">→</span>
+                  <span>{r}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
 
       {/* M1 map + network */}
@@ -294,7 +334,22 @@ export function ModuleReportDisplay({ report, locale }: Props) {
           <Cpu className="h-5 w-5 text-cyan-400" />
           M2 · {ru ? "Железо (stable_id)" : "Hardware (stable_id)"}
         </h3>
-        <p className="mb-3 font-mono text-sm text-cyan-300/90">{m2.stableId}</p>
+        <div className="mb-3 space-y-1">
+          <p className="font-mono text-sm text-cyan-300/90">
+            <span className="mr-2 font-sans text-[11px] uppercase tracking-wider text-zinc-500">
+              browser
+            </span>
+            {m2.browserId ?? m2.stableId}
+          </p>
+          {m2.deviceId ? (
+            <p className="font-mono text-sm text-violet-300/90">
+              <span className="mr-2 font-sans text-[11px] uppercase tracking-wider text-zinc-500">
+                device
+              </span>
+              {m2.deviceId}
+            </p>
+          ) : null}
+        </div>
         <p className="mb-3 text-xs text-zinc-500">
           {ru
             ? "Одинаковый на всех браузерах одного ПК — это нормально. Коллизия «пустой Chrome = основной» объясняется железом."
@@ -303,10 +358,30 @@ export function ModuleReportDisplay({ report, locale }: Props) {
         <div className="grid gap-2 text-xs sm:grid-cols-2">
           <Row k="WebGL" v={m2.webgl.renderer.slice(0, 80)} />
           <Row k="Canvas" v={m2.canvas.combined} />
-          <Row k="Audio" v={m2.audio.hash} />
+          <Row
+            k="Audio"
+            v={
+              m2.audio.randomized
+                ? `randomized · ${m2.audio.samples?.join(" ≠ ") ?? ""}`
+                : m2.audio.hash
+            }
+          />
           <Row k="Fonts" v={`${m2.fonts.count} · ${m2.fonts.osGuess}`} />
           <Row k="WebGPU" v={m2.webgpu.supported ? m2.webgpu.adapterInfo || "yes" : "no"} />
           <Row k="Math" v={m2.math.hash} />
+          {m2.platform ? (
+            <>
+              <Row
+                k="CPU / RAM"
+                v={`${m2.platform.hardwareConcurrency ?? "?"} cores · ${
+                  m2.platform.deviceMemory ?? "?"
+                } GB`}
+              />
+              <Row k="Voices" v={`${m2.platform.voices.count} · ${m2.platform.voices.hash}`} />
+              <Row k="Timezone" v={m2.platform.intl.timeZone ?? "—"} />
+              <Row k="CSS media" v={m2.platform.css.hash} />
+            </>
+          ) : null}
           <Row
             k="Screen"
             v={`${m2.screen.width}×${m2.screen.height} dpr=${m2.screen.devicePixelRatio}`}
@@ -355,6 +430,7 @@ export function ModuleReportDisplay({ report, locale }: Props) {
           <Pill ok={m3.protection.score >= 50} label={`protection ${m3.protection.score}`} />
           <Pill ok={m3.protection.brave} label="Brave" />
           <Pill ok={m3.protection.rfpCanvasNoise} label="Canvas noise" />
+          <Pill ok={Boolean(m3.protection.rfpAudioNoise)} label="Audio noise" />
           <Pill ok={m3.extensions.adsBlockedDom} label="Adblock DOM" />
           <Pill ok={m3.spoofScore < 30} label={`spoof ${m3.spoofScore}`} />
         </div>
@@ -362,6 +438,41 @@ export function ModuleReportDisplay({ report, locale }: Props) {
           Trackers blocked {m3.protection.trackerScriptsBlocked} / loaded{" "}
           {m3.protection.trackerScriptsLoaded}
         </p>
+
+        {m3.surface ? (
+          <details className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3 text-xs">
+            <summary className="cursor-pointer text-zinc-300">
+              {ru
+                ? `Где может жить ваш ID (${m3.surface.persistentSlots} хранилищ) и какие API открыты`
+                : `Where an ID can live (${m3.surface.persistentSlots} slots) · exposed APIs`}
+            </summary>
+            <p className="mt-2 text-[11px] text-zinc-500">
+              {ru
+                ? "«Очистить куки» и «очистить данные сайта» — разные вещи. Ниже — места, куда эта страница только что смогла записать метку (и тут же её удалила)."
+                : "“Clear cookies” and “clear site data” are not the same thing. These are the places this page just wrote a marker to — and immediately deleted it again."}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {m3.surface.storage.map((slot) => (
+                <li key={slot.id} className="flex flex-wrap items-center gap-x-2">
+                  <span
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${
+                      slot.writable ? "bg-rose-400" : "bg-zinc-600"
+                    }`}
+                  />
+                  <span className="min-w-28 text-zinc-300">{slot.label}</span>
+                  <span className="text-zinc-600">{slot.note}</span>
+                </li>
+              ))}
+            </ul>
+            {m3.surface.findings.length > 0 && (
+              <ul className="mt-2 space-y-1 text-[11px] text-amber-400/80">
+                {m3.surface.findings.map((f, i) => (
+                  <li key={i}>· {f}</li>
+                ))}
+              </ul>
+            )}
+          </details>
+        ) : null}
         <ul className="mt-2 space-y-1 text-xs text-zinc-400">
           {m3.protection.signals.map((s, i) => (
             <li key={i}>· {s}</li>
@@ -389,6 +500,18 @@ export function ModuleReportDisplay({ report, locale }: Props) {
         <div className="grid gap-2 text-xs sm:grid-cols-2">
           <Row k="Emoji FP" v={m5.emojiFingerprint} />
           <Row k="VM probability" v={`${Math.round(m5.vmProbability * 100)}%`} />
+          {m5.temporal.similarity != null ? (
+            <Row
+              k={ru ? "Схожесть с прошлым визитом" : "Similarity to last visit"}
+              v={`${Math.round(m5.temporal.similarity * 100)}% · ${m5.temporal.verdict ?? "—"}`}
+            />
+          ) : null}
+          {m5.temporal.changedComponents?.length ? (
+            <Row
+              k={ru ? "Изменилось" : "Changed since then"}
+              v={m5.temporal.changedComponents.join(", ")}
+            />
+          ) : null}
         </div>
         {m5.vmSignals.length > 0 && (
           <ul className="mt-2 text-xs text-rose-400/80">

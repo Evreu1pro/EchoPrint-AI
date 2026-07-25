@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EchoPrint AI — Browser fingerprint & exposure lab",
+  title: "EchoPrint AI — M1–M5 fingerprint lab",
   description:
-    "Educational lab: network intel, hardware stable_id, spoof/protection scores, AdTech transparency (M7). History stays in localStorage.",
+    "Educational scanner: network intel, hardware stable_id, spoof/protection scores. History stays local.",
   keywords: [
     "browser fingerprint",
     "canvas fingerprint",
@@ -24,26 +24,19 @@ export const metadata: Metadata = {
     "anti-detect",
     "tracker exposure",
     "device integrity",
-    "JA3",
-    "Privacy Sandbox",
-    "AdTech transparency",
-    "stable_id",
   ],
-  authors: [{ name: "Evreu1pro" }, { name: "EchoPrint AI" }],
-  metadataBase: new URL("https://echo-print-ai.vercel.app"),
+  authors: [{ name: "EchoPrint AI" }],
   openGraph: {
-    title: "EchoPrint AI — fingerprint & exposure lab",
+    title: "EchoPrint AI — M1–M5 fingerprint lab",
     description:
-      "Separate empty Chrome from hardened browsers. Network map, stable_id, A/B/C/D scores, AdTech radar. Local-first history.",
+      "Separate empty Chrome from hardened browsers. Uniqueness, spoof, protection, vulnerability.",
     type: "website",
     url: "https://echo-print-ai.vercel.app",
-    siteName: "EchoPrint AI",
   },
   twitter: {
     card: "summary_large_image",
     title: "EchoPrint AI",
-    description:
-      "Browser fingerprint lab — network intel, stable_id, scores, AdTech transparency",
+    description: "M1–M5 browser fingerprint integrity lab",
   },
 };
 

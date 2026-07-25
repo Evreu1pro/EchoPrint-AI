@@ -1,11 +1,29 @@
 // ============================================================
 // M5 — Temporal consistency, emoji, VM signals
+// ------------------------------------------------------------
+// Temporal matching is fuzzy. A strict hash comparison answers the wrong
+// question ("is every signal byte-identical?") when the interesting one is
+// "would a tracker still recognise this person?". A driver update changes
+// the canvas hash; it does not make you a new human.
 // ============================================================
 
 import { fnv1aHash } from '@/lib/utils/helpers';
 import type { Module2Hardware, Module5Advanced } from '../types';
+import {
+  classifyIdentity,
+  componentSimilarity,
+  type FingerprintComponents,
+} from '../identity/fuzzy';
 
 const LS_KEY = 'echoprint_stable_v3';
+
+interface StoredIdentity {
+  stableId?: string;
+  browserId?: string;
+  deviceId?: string;
+  components?: Partial<FingerprintComponents>;
+  t?: number;
+}
 
 function emojiFingerprint(): string {
   try {
@@ -52,50 +70,98 @@ function vmSignals(m2: Module2Hardware): { signals: string[]; probability: numbe
   return { signals, probability };
 }
 
-function temporalCheck(stableId: string): Module5Advanced['temporal'] {
-  try {
-    const prev = localStorage.getItem(LS_KEY);
-    const payload = JSON.stringify({
-      stableId,
-      t: Date.now(),
-    });
-    localStorage.setItem(LS_KEY, payload);
-
-    if (!prev) {
-      return {
-        previousStableId: null,
-        sameDeviceDifferentSession: false,
-        message: null,
-      };
-    }
-    const parsed = JSON.parse(prev) as { stableId?: string };
-    if (parsed.stableId && parsed.stableId === stableId) {
-      return {
-        previousStableId: parsed.stableId,
-        sameDeviceDifferentSession: true,
-        message:
-          'Same hardware stable_id as a previous visit (localStorage). Clearing cookies does not reset GPU/canvas identity — we still recognize this device.',
-      };
-    }
-    if (parsed.stableId && parsed.stableId !== stableId) {
-      return {
-        previousStableId: parsed.stableId,
-        sameDeviceDifferentSession: false,
-        message: 'Hardware stable_id changed since last visit (driver/browser/OS update or different machine).',
-      };
-    }
-  } catch {
-    /* private mode */
-  }
+function emptyTemporal(): Module5Advanced['temporal'] {
   return {
     previousStableId: null,
     sameDeviceDifferentSession: false,
     message: null,
+    similarity: undefined,
+    verdict: 'no_baseline',
+    changedComponents: [],
+    previousDeviceId: null,
+    crossBrowserMatch: false,
+  };
+}
+
+function temporalCheck(m2: Module2Hardware): Module5Advanced['temporal'] {
+  const browserId = m2.browserId ?? m2.stableId;
+  const deviceId = m2.deviceId ?? null;
+
+  let prev: StoredIdentity | null = null;
+  try {
+    const rawPrev = localStorage.getItem(LS_KEY);
+    if (rawPrev) prev = JSON.parse(rawPrev) as StoredIdentity;
+
+    localStorage.setItem(
+      LS_KEY,
+      JSON.stringify({
+        stableId: browserId,
+        browserId,
+        deviceId,
+        components: m2.components,
+        t: Date.now(),
+      } satisfies StoredIdentity)
+    );
+  } catch {
+    // Private mode / storage blocked — nothing to compare against.
+    return emptyTemporal();
+  }
+
+  if (!prev) return emptyTemporal();
+
+  const previousStableId = prev.browserId ?? prev.stableId ?? null;
+  const previousDeviceId = prev.deviceId ?? null;
+  const crossBrowserMatch = Boolean(
+    deviceId && previousDeviceId && deviceId === previousDeviceId && previousStableId !== browserId
+  );
+
+  // Legacy entries (written before component vectors existed) can only be
+  // compared strictly.
+  if (!prev.components || !m2.components) {
+    const identical = Boolean(previousStableId && previousStableId === browserId);
+    return {
+      previousStableId,
+      previousDeviceId,
+      crossBrowserMatch,
+      sameDeviceDifferentSession: identical,
+      similarity: identical ? 1 : 0,
+      verdict: identical ? 'same_device' : 'different_device',
+      changedComponents: [],
+      message: identical
+        ? 'Same hardware stable_id as a previous visit (localStorage). Clearing cookies does not reset GPU/canvas identity — we still recognize this device.'
+        : 'Hardware stable_id changed since last visit (no component data stored to say why).',
+    };
+  }
+
+  const sim = componentSimilarity(prev.components, m2.components);
+  const match = classifyIdentity(sim);
+  const recognised = match.verdict === 'same_device' || match.verdict === 'same_device_drifted';
+
+  let message = match.message;
+  if (recognised) {
+    message +=
+      ' Clearing cookies does not reset GPU/canvas identity — we still recognize this device.';
+  }
+  if (crossBrowserMatch) {
+    message +=
+      ` Different browser, same machine: the cross-browser device id (${deviceId?.slice(0, 8)}…)` +
+      ' is unchanged, because fonts, screen, CPU and installed voices describe the OS, not the browser.';
+  }
+
+  return {
+    previousStableId,
+    previousDeviceId,
+    crossBrowserMatch,
+    sameDeviceDifferentSession: recognised || crossBrowserMatch,
+    similarity: sim.score,
+    verdict: match.verdict,
+    changedComponents: match.changed,
+    message,
   };
 }
 
 export function collectModule5(m2: Module2Hardware): Module5Advanced {
-  const temporal = temporalCheck(m2.stableId);
+  const temporal = temporalCheck(m2);
   const { signals, probability } = vmSignals(m2);
   return {
     temporal,

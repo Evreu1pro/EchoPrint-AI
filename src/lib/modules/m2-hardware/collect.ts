@@ -4,6 +4,8 @@
 
 import { fnv1aHash, sha256Hash } from '@/lib/utils/helpers';
 import type { Module2Hardware } from '../types';
+import { deviceLevelComponents, type FingerprintComponents } from '../identity/fuzzy';
+import { collectPlatform } from './platform';
 
 function canvasHash(draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void): string {
   try {
@@ -196,7 +198,7 @@ async function collectWebGPU() {
   }
 }
 
-async function collectAudio() {
+async function renderAudioHash() {
   try {
     const Offline =
       window.OfflineAudioContext ||
@@ -224,6 +226,32 @@ async function collectAudio() {
   } catch {
     return { hash: 'error', sampleRate: 0 };
   }
+}
+
+/**
+ * Render the audio fingerprint twice.
+ *
+ * Brave and Firefox-with-RFP inject per-call noise into the Web Audio DSP
+ * output. With a single render that looks like a brand-new device on every
+ * scan. Rendering twice tells the two cases apart: a stable hash is a real
+ * hardware signal, an unstable one is a protection signal (and is reported
+ * as 'randomized' so it never poisons the stable id).
+ */
+async function collectAudio() {
+  const first = await renderAudioHash();
+  if (first.hash === 'unsupported' || first.hash === 'error') {
+    return { ...first, randomized: false, samples: [first.hash] };
+  }
+
+  const second = await renderAudioHash();
+  const randomized = first.hash !== second.hash;
+
+  return {
+    hash: randomized ? 'randomized' : first.hash,
+    sampleRate: first.sampleRate,
+    randomized,
+    samples: [first.hash, second.hash],
+  };
 }
 
 const FONT_LIST = [
@@ -302,9 +330,21 @@ function collectScreen() {
     colorDepth: screen.colorDepth,
     orientation: screen.orientation?.type ?? null,
   };
+  // Window position and orientation change between sessions for reasons that
+  // have nothing to do with identity, so keep a second hash without them.
+  const stable = {
+    width: s.width,
+    height: s.height,
+    availWidth: s.availWidth,
+    availHeight: s.availHeight,
+    devicePixelRatio: s.devicePixelRatio,
+    colorDepth: s.colorDepth,
+  };
+
   return {
     ...s,
     hash: fnv1aHash(JSON.stringify(s)),
+    stableHash: fnv1aHash(JSON.stringify(stable)),
   };
 }
 
@@ -331,22 +371,38 @@ export async function collectModule2(): Promise<Module2Hardware> {
   const fonts = collectFonts();
   const screen = collectScreen();
   const math = collectMath();
+  const platform = await collectPlatform();
 
-  const raw = [
-    canvas.combined,
-    webgl.renderer,
-    webgl.triangleHash,
-    webgl.parametersHash,
-    webgpu.featuresHash || '',
-    audio.hash,
-    fonts.hash,
-    screen.hash,
-    math.hash,
-  ].join('||');
+  // Keep the signals separate instead of collapsing them immediately: the
+  // fuzzy matcher needs the individual components to tell "driver update"
+  // apart from "different machine".
+  const components: FingerprintComponents = {
+    canvas: canvas.combined,
+    webglRenderer: webgl.renderer,
+    webglTriangle: webgl.triangleHash,
+    webglParams: webgl.parametersHash,
+    webgpu: webgpu.featuresHash || '',
+    audio: audio.hash,
+    fonts: fonts.hash,
+    // Deliberately the position-independent hash.
+    screen: screen.stableHash,
+    math: math.hash,
+    platform: platform.hash,
+    voices: platform.voices.hash,
+    css: platform.css.hash,
+    intl: platform.intl.hash,
+  };
 
-  const stableId = await sha256Hash(raw);
+  const raw = Object.values(components).join('||');
+  const browserIdFull = await sha256Hash(raw);
+  const browserId = browserIdFull.slice(0, 32);
 
-  const entropy = estimateEntropy({ canvas, webgl, webgpu, audio, fonts, screen, math });
+  // The cross-browser id: OS-level facts only, GPU string normalized.
+  const deviceRaw = JSON.stringify(deviceLevelComponents(components));
+  const deviceIdFull = await sha256Hash(deviceRaw);
+  const deviceId = deviceIdFull.slice(0, 32);
+
+  const entropy = estimateEntropy({ canvas, webgl, webgpu, audio, fonts, screen, math, platform });
 
   return {
     canvas,
@@ -356,7 +412,12 @@ export async function collectModule2(): Promise<Module2Hardware> {
     fonts,
     screen,
     math,
-    stableId: stableId.slice(0, 32),
+    platform,
+    components,
+    browserId,
+    deviceId,
+    // stableId stays for backward compatibility with saved history entries.
+    stableId: browserId,
     entropyBitsEstimate: entropy.bits,
     entropyDetail: entropy.detail,
     entropyCapBits: entropy.capBits,
@@ -390,10 +451,16 @@ export function estimateEntropy(m2: {
   canvas: { combined: string };
   webgl: { renderer: string; extensionCount: number };
   webgpu: { supported: boolean };
-  audio: { hash: string };
+  audio: { hash: string; randomized?: boolean };
   fonts: { count: number };
   screen: { width: number; height: number; devicePixelRatio: number; colorDepth: number };
   math: { hash: string };
+  platform?: {
+    hardwareConcurrency: number | null;
+    deviceMemory: number | null;
+    voices: { count: number };
+    intl: { timeZone: string | null };
+  };
 }): {
   bits: number;
   capBits: number;
@@ -419,8 +486,11 @@ export function estimateEntropy(m2: {
     raw.push({ source: 'Canvas ×3', rawBits: 7, note: 'rasterizer + font stack' });
   }
 
-  // AudioContext DSP output.
-  if (m2.audio.hash !== 'unsupported' && m2.audio.hash !== 'error') {
+  // AudioContext DSP output. A randomized hash carries no identity at all,
+  // so it must not be counted as entropy.
+  if (m2.audio.randomized) {
+    raw.push({ source: 'AudioContext', rawBits: 0, note: 'randomized by the browser — no signal' });
+  } else if (m2.audio.hash !== 'unsupported' && m2.audio.hash !== 'error') {
     raw.push({ source: 'AudioContext', rawBits: 5, note: 'DSP + sample rate' });
   }
 
@@ -453,6 +523,37 @@ export function estimateEntropy(m2: {
 
   // Math/JS engine precision: nearly identical across a browser family.
   raw.push({ source: 'Math / JS engine', rawBits: 0.8 });
+
+  // ---- Cross-browser OS signals ----------------------------------------
+  if (m2.platform) {
+    const cores = m2.platform.hardwareConcurrency;
+    const memory = m2.platform.deviceMemory;
+    if (cores || memory) {
+      raw.push({
+        source: 'CPU / memory class',
+        rawBits: 2.2,
+        note: `${cores ?? '?'} cores · ${memory ?? '?'} GB`,
+      });
+    }
+
+    // Installed TTS voices leak OS build + language packs and are rarely
+    // touched by anti-fingerprinting modes.
+    if (m2.platform.voices.count > 0) {
+      raw.push({
+        source: 'Speech voices',
+        rawBits: Math.min(4, Math.log2(Math.max(2, m2.platform.voices.count))),
+        note: `${m2.platform.voices.count} voices installed`,
+      });
+    }
+
+    if (m2.platform.intl.timeZone) {
+      raw.push({
+        source: 'Timezone / locale',
+        rawBits: 3,
+        note: m2.platform.intl.timeZone,
+      });
+    }
+  }
 
   // ---- Correlation discount --------------------------------------------
   // Strongest signal counts fully, each following signal counts less,

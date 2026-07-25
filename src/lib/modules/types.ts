@@ -2,6 +2,12 @@
 // EchoPrint multi-module contracts (M1–M5)
 // ============================================================
 
+import type { FingerprintComponents } from './identity/fuzzy';
+import type { PlatformSignals } from './m2-hardware/platform';
+import type { ApiSurface } from './m3-software/surface';
+
+export type { FingerprintComponents, PlatformSignals, ApiSurface };
+
 export type IpConnectionType =
   | 'residential'
   | 'mobile'
@@ -103,7 +109,14 @@ export interface Module2Hardware {
     parametersHash: string;
   };
   webgpu: { supported: boolean; adapterInfo: string | null; featuresHash: string | null };
-  audio: { hash: string; sampleRate: number };
+  audio: {
+    hash: string;
+    sampleRate: number;
+    /** True when repeated renders disagree (Brave / RFP audio noise). */
+    randomized?: boolean;
+    /** Raw per-render hashes used to detect randomization. */
+    samples?: string[];
+  };
   fonts: { detected: string[]; count: number; osGuess: string; hash: string };
   screen: {
     width: number;
@@ -116,8 +129,18 @@ export interface Module2Hardware {
     colorDepth: number;
     orientation: string | null;
     hash: string;
+    /** Hash without window position/orientation — stable between sessions. */
+    stableHash: string;
   };
   math: { hash: string };
+  /** Cheap cross-browser OS signals (CPU, memory, voices, CSS, Intl). */
+  platform?: PlatformSignals;
+  /** Individual signals kept separately so identity can be matched fuzzily. */
+  components?: FingerprintComponents;
+  /** Full fingerprint of this browser (was: stableId). */
+  browserId?: string;
+  /** OS-level id that survives switching browsers on the same machine. */
+  deviceId?: string;
   /** Stable across browsers on same machine */
   stableId: string;
   entropyBitsEstimate: number;
@@ -144,11 +167,19 @@ export interface Module3Software {
     score: number; // 0–100 higher = more protected
     brave: boolean;
     rfpCanvasNoise: boolean;
+    /** Audio DSP output differs between renders (audio noise / RFP). */
+    rfpAudioNoise?: boolean;
     gpc: boolean;
     trackerScriptsBlocked: number;
     trackerScriptsLoaded: number;
     signals: string[];
   };
+  /**
+   * Exposed browser APIs and storage slots. Collected here so that M4 can
+   * stay a pure function instead of reading globals while scoring.
+   * Optional: reports saved by older versions do not carry it.
+   */
+  surface?: ApiSurface;
 }
 
 export interface Module4Scores {
@@ -168,7 +199,12 @@ export interface Module4Scores {
   /** Trackability narrative 0–100 */
   trackabilityPercent: number;
   trackabilityNarrative: string;
+  /** Why the spoof score looks the way it does. */
   formulaNotes: string[];
+  /** Why the vulnerability score looks the way it does (kept separate). */
+  vulnerabilityNotes: string[];
+  /** Concrete, ranked steps this specific profile can take. */
+  recommendations: string[];
 }
 
 export interface Module5Advanced {
@@ -176,6 +212,15 @@ export interface Module5Advanced {
     previousStableId: string | null;
     sameDeviceDifferentSession: boolean;
     message: string | null;
+    /** 0–1 weighted component similarity against the previous visit. */
+    similarity?: number;
+    verdict?: 'same_device' | 'same_device_drifted' | 'uncertain' | 'different_device' | 'no_baseline';
+    /** Components that changed since the previous visit. */
+    changedComponents?: string[];
+    /** Cross-browser device id seen on the previous visit. */
+    previousDeviceId?: string | null;
+    /** True when the device id matched but the browser id did not. */
+    crossBrowserMatch?: boolean;
   };
   emojiFingerprint: string;
   vmSignals: string[];

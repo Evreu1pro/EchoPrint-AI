@@ -1,14 +1,26 @@
 // ============================================================
 // M4 — Four scores A/B/C/D + trackability narrative
+// ------------------------------------------------------------
+// This module is a PURE function of (m1, m2, m3, m5).
+//
+// It used to read `navigator`, `SharedArrayBuffer` and `crossOriginIsolated`
+// directly while scoring, which meant the vulnerability score depended on
+// whatever runtime happened to execute it — in unit tests it was scoring
+// Node's globals rather than the visitor's browser. Those signals are now
+// collected in M3 (`m3.surface`) and passed in as data.
 // ============================================================
 
 import type {
+  ApiSurface,
   Module1Network,
   Module2Hardware,
   Module3Software,
   Module4Scores,
   Module5Advanced,
 } from '../types';
+
+/** Practical ceiling for browser fingerprint entropy (Panopticlick/AmIUnique). */
+export const UNIQUENESS_CEILING_BITS = 24;
 
 export function computeModule4(
   m1: Module1Network,
@@ -21,7 +33,10 @@ export function computeModule4(
   // so 24+ bits = 100. Anything above 33 bits (log2 of the device population)
   // is impossible and is clamped upstream in M2.
   const uniquenessBits = Math.min(m2.entropyBitsEstimate, m2.entropyCapBits ?? 33);
-  const uniqueness = Math.min(100, Math.round((uniquenessBits / 24) * 100));
+  const uniqueness = Math.min(
+    100,
+    Math.round((uniquenessBits / UNIQUENESS_CEILING_BITS) * 100)
+  );
   const oneInN = m2.oneInN ?? Math.round(2 ** uniquenessBits);
   const rarity =
     oneInN >= 1_000_000
@@ -115,21 +130,14 @@ export function computeModule4(
           ? 'Light protection'
           : 'Open — trackers load freely (stock Chrome profile)';
 
-  // D — Vulnerability
-  let vulnerability = 0;
-  // old chrome hard to know — use missing protections
-  if (aggressiveness < 20) vulnerability += 25;
-  if (typeof SharedArrayBuffer !== 'undefined') {
-    vulnerability += 15;
-    formulaNotes.push('SharedArrayBuffer available +15 vuln');
-  }
-  if ('usb' in navigator) vulnerability += 10;
-  if ('bluetooth' in navigator) vulnerability += 10;
-  if ('hid' in navigator) vulnerability += 8;
-  if (m2.webgl.renderer !== 'none') vulnerability += 12; // GPU exposed
-  if (m1.ipIntel.ip && !m1.ipIntel.isTor) vulnerability += 10; // public IP visible
-  if (m5.vmProbability > 0.5) vulnerability += 5;
-  vulnerability = Math.min(100, vulnerability);
+  // D — Vulnerability (from collected surface data, never from globals)
+  const { vulnerability, vulnerabilityNotes } = scoreVulnerability(
+    m1,
+    m2,
+    m3,
+    m5,
+    aggressiveness
+  );
 
   const vulnerabilityLabel =
     vulnerability >= 70
@@ -171,6 +179,8 @@ export function computeModule4(
     trackabilityNarrative += ` ${m1.ipHistory.summary}`;
   }
 
+  const recommendations = buildRecommendations(m1, m2, m3, aggressiveness, uniqueness);
+
   return {
     uniqueness,
     uniquenessBits,
@@ -184,5 +194,128 @@ export function computeModule4(
     trackabilityPercent,
     trackabilityNarrative,
     formulaNotes,
+    vulnerabilityNotes,
+    recommendations,
   };
+}
+
+// ============================================================
+// D — Vulnerability
+// ============================================================
+
+function scoreVulnerability(
+  m1: Module1Network,
+  m2: Module2Hardware,
+  m3: Module3Software,
+  m5: Module5Advanced,
+  aggressiveness: number
+): { vulnerability: number; vulnerabilityNotes: string[] } {
+  const notes: string[] = [];
+  const surface: ApiSurface | undefined = m3.surface;
+  let vulnerability = 0;
+
+  const add = (points: number, note: string) => {
+    vulnerability += points;
+    notes.push(`${note} +${points}`);
+  };
+
+  if (aggressiveness < 20) add(25, 'No meaningful tracker protection');
+
+  if (!surface) {
+    // Older saved reports have no surface data. Say so instead of silently
+    // scoring zero and pretending the browser is safe.
+    notes.push('API surface not collected in this report (older scan)');
+  } else {
+    if (surface.sharedArrayBuffer) add(15, 'SharedArrayBuffer exposed (timing side channels)');
+    if (surface.webUsb) add(10, 'WebUSB reachable');
+    if (surface.webBluetooth) add(10, 'Web Bluetooth reachable');
+    if (surface.webHid) add(8, 'WebHID reachable');
+    if (surface.webSerial) add(6, 'Web Serial reachable');
+    if (surface.webMidi) add(4, 'Web MIDI reachable');
+
+    // Every extra storage slot is another place a tracking id survives a
+    // "clear cookies".
+    if (surface.persistentSlots > 3) {
+      add(
+        Math.min(12, (surface.persistentSlots - 3) * 4),
+        `${surface.persistentSlots} writable storage slots`
+      );
+    }
+  }
+
+  if (m2.webgl.renderer !== 'none') add(12, 'GPU model exposed via WebGL');
+  if (m1.ipIntel.ip && !m1.ipIntel.isTor) add(10, 'Public IP visible');
+  if (m5.vmProbability > 0.5) add(5, 'Virtual machine signals present');
+
+  return { vulnerability: Math.min(100, vulnerability), vulnerabilityNotes: notes };
+}
+
+// ============================================================
+// Actionable output
+// ------------------------------------------------------------
+// A score with no next step is just a number. These are derived from the
+// signals that actually fired for this profile.
+// ============================================================
+
+function buildRecommendations(
+  m1: Module1Network,
+  m2: Module2Hardware,
+  m3: Module3Software,
+  aggressiveness: number,
+  uniqueness: number
+): string[] {
+  const out: string[] = [];
+  const surface = m3.surface;
+
+  if (aggressiveness < 20) {
+    out.push(
+      'Install a content blocker (uBlock Origin) or switch to a browser with built-in blocking — this is the single biggest change available to you.'
+    );
+  }
+
+  if (!m3.protection.rfpCanvasNoise && !m3.protection.rfpAudioNoise && uniqueness >= 65) {
+    out.push(
+      'Your canvas and audio fingerprints are stable and highly unique. Enable fingerprint randomization (Brave Shields, or Firefox privacy.resistFingerprinting) so they stop being a reliable id.'
+    );
+  }
+
+  if (m2.webgl.renderer !== 'none' && !/generic|masked|software/i.test(m2.webgl.renderer)) {
+    out.push(
+      `Your exact GPU model is readable (${m2.webgl.renderer.slice(0, 48)}). Only a fingerprint-resisting browser mode hides it.`
+    );
+  }
+
+  const risky = [
+    surface?.webUsb && 'WebUSB',
+    surface?.webBluetooth && 'Web Bluetooth',
+    surface?.webHid && 'WebHID',
+    surface?.webSerial && 'Web Serial',
+  ].filter(Boolean) as string[];
+  if (risky.length) {
+    out.push(
+      `Disable unused device APIs (${risky.join(', ')}) in site settings — you almost certainly never use them on the web.`
+    );
+  }
+
+  if (surface && surface.persistentSlots > 3) {
+    out.push(
+      `${surface.persistentSlots} storage mechanisms accepted a write. Clear "site data", not just cookies — otherwise localStorage, IndexedDB and the Cache API keep your id.`
+    );
+  }
+
+  if (!m3.protection.gpc) {
+    out.push('Turn on Global Privacy Control — it is a legally recognized opt-out signal in several jurisdictions.');
+  }
+
+  if (m1.webrtcVsHttp.status === 'mismatch') {
+    out.push(
+      'WebRTC is leaking an IP that differs from your HTTP path. If you use a VPN, this defeats it — disable WebRTC or force it through the tunnel.'
+    );
+  }
+
+  if (!out.length) {
+    out.push('No high-impact weakness found in this scan — this profile is already well hardened.');
+  }
+
+  return out;
 }

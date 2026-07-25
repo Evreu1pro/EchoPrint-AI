@@ -6,6 +6,7 @@
 import type { Module2Hardware } from '../types';
 import type { Module3Software } from '../types';
 import { sampleCanvasStability } from './canvas-stability';
+import { collectSurface } from './surface';
 
 function detectBrave(): boolean {
   try {
@@ -102,6 +103,64 @@ function detectSpoof(m2: Module2Hardware): Module3Software['spoofFindings'] {
   return findings;
 }
 
+/**
+ * Known extensions and a resource each one used to expose.
+ *
+ * Reality check: Manifest V3 requires `web_accessible_resources` to declare
+ * which sites may load them, so most modern extensions correctly refuse
+ * these probes. A hit therefore means "old or loosely configured extension",
+ * not "extension installed" — the absence of hits proves nothing.
+ */
+const EXTENSION_PROBES: { id: string; name: string; resource: string }[] = [
+  { id: 'cjpalhdlnbpafiamejdnhcphjbkeiagm', name: 'uBlock Origin', resource: 'img/icon_16.png' },
+  { id: 'gighmmpiobklfepjocnamgkkbiglidom', name: 'AdBlock', resource: 'icons/icon16.png' },
+  { id: 'bgnkhhnnamicmpeenaelnjfhikgbkllg', name: 'AdGuard', resource: 'icons/16.png' },
+  { id: 'nkbihfbeogaeaoehlefnkodbefgpgknn', name: 'MetaMask', resource: 'images/icon-16.png' },
+  { id: 'gcbommkclmclpchllfjekcdonpmejbdp', name: 'HTTPS Everywhere', resource: 'icons/icon16.png' },
+];
+
+/**
+ * Load a chrome-extension:// resource as an image. Unlike fetch(), this is
+ * not blocked by CORS, so a successful decode is a genuine positive.
+ */
+function probeExtension(id: string, resource: string, timeoutMs = 700): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    try {
+      if (!/^chrome|^edge/i.test(navigator.userAgent) && !('chrome' in window)) {
+        resolve(false);
+        return;
+      }
+      const img = new Image();
+      const done = (result: boolean) => {
+        clearTimeout(timer);
+        img.onload = null;
+        img.onerror = null;
+        resolve(result);
+      };
+      const timer = window.setTimeout(() => done(false), timeoutMs);
+      img.onload = () => done(img.width > 0);
+      img.onerror = () => done(false);
+      img.src = `chrome-extension://${id}/${resource}`;
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+async function probeExtensions(): Promise<string[]> {
+  try {
+    const results = await Promise.all(
+      EXTENSION_PROBES.map(async (probe) => ({
+        name: probe.name,
+        hit: await probeExtension(probe.id, probe.resource),
+      }))
+    );
+    return results.filter((r) => r.hit).map((r) => r.name);
+  } catch {
+    return [];
+  }
+}
+
 function detectExtensions(): Module3Software['extensions'] {
   const suspiciousGlobals: string[] = [];
   const win = window as unknown as Record<string, unknown>;
@@ -138,30 +197,18 @@ function detectExtensions(): Module3Software['extensions'] {
     adsBlockedDom = false;
   }
 
-  // Extension probe — only a few known public extension IDs (educational)
-  // Most modern Chrome blocks chrome-extension:// fetch from pages; hits = misconfigured/old
-  const probeIds = [
-    'cjpalhdlnbpafiamejdnhcphjbkeiagm', // uBlock Origin
-    'gighmmpiobklfepjocnamgkkbiglidom', // AdBlock
-    'bgnkhhnnamicmpeenaelnjfhikgbkllg', // AdGuard
-    'nmmhkkegccagdldgiimedpiccmgmieda', // Chrome Web Store payments (often present system)
-  ];
-  const extensionProbeHits: string[] = [];
-  // sync probe via Image is more reliable than fetch for chrome-extension
-  // We skip network probes here for speed; flag globals only
-  void probeIds;
-
   return {
     adsBlockedDom,
     ethereum: Boolean(win.ethereum),
     vueDevtools: Boolean(win.__VUE_DEVTOOLS_GLOBAL_HOOK__),
     reactDevtools: Boolean(win.__REACT_DEVTOOLS_GLOBAL_HOOK__),
     suspiciousGlobals,
-    extensionProbeHits,
+    // Filled in by collectModule3 via the async probe.
+    extensionProbeHits: [],
   };
 }
 
-async function detectProtection(): Promise<Module3Software['protection']> {
+async function detectProtection(m2: Module2Hardware): Promise<Module3Software['protection']> {
   const signals: string[] = [];
   let score = 0;
 
@@ -183,6 +230,14 @@ async function detectProtection(): Promise<Module3Software['protection']> {
   if (rfpCanvasNoise) {
     score += 25;
     signals.push('Canvas hash unstable across samples (noise / RFP)');
+  }
+
+  // Audio noise: M2 renders the DSP fingerprint twice, so a mismatch means
+  // the browser is actively randomizing it rather than the device changing.
+  const rfpAudioNoise = m2.audio.randomized === true;
+  if (rfpAudioNoise) {
+    score += 15;
+    signals.push('AudioContext output randomized between renders (Brave / RFP)');
   }
 
   // Tracker script load test (subset — fast)
@@ -254,6 +309,7 @@ async function detectProtection(): Promise<Module3Software['protection']> {
     score,
     brave,
     rfpCanvasNoise,
+    rfpAudioNoise,
     gpc,
     trackerScriptsBlocked: blocked,
     trackerScriptsLoaded: loaded,
@@ -272,14 +328,21 @@ export async function collectModule3(m2: Module2Hardware): Promise<Module3Softwa
   spoofScore = Math.min(100, spoofScore);
 
   const extensions = detectExtensions();
-  if (extensions.adsBlockedDom) {
-    // not spoof — protection
-  }
 
-  const protection = await detectProtection();
+  // Run the slow probes together instead of serially.
+  const [protection, extensionProbeHits, surface] = await Promise.all([
+    detectProtection(m2),
+    probeExtensions(),
+    collectSurface(),
+  ]);
+  extensions.extensionProbeHits = extensionProbeHits;
+
   if (extensions.adsBlockedDom) {
     protection.score = Math.min(100, protection.score + 12);
     protection.signals.push('DOM ad-bait hidden (adblocker)');
+  }
+  if (extensionProbeHits.length) {
+    protection.signals.push(`Extension resources readable: ${extensionProbeHits.join(', ')}`);
   }
 
   return {
@@ -287,5 +350,6 @@ export async function collectModule3(m2: Module2Hardware): Promise<Module3Softwa
     spoofScore,
     extensions,
     protection,
+    surface,
   };
 }
