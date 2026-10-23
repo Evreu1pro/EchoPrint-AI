@@ -1,6 +1,6 @@
 # EchoPrint AI
 
-**M1–M5 fingerprint lab** — separates empty Chrome from hardened browsers.
+**M1–M5 + M7 fingerprint lab** — separates empty Chrome from hardened browsers, and shows what ad tech can see.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
@@ -18,6 +18,11 @@
 | **M3** | Software | Spoof (UA/CH/GPU/fonts), adblock DOM, Brave, canvas noise, tracker script probes → **protection 0 vs 95** |
 | **M4** | Four scores | **A** uniqueness · **B** spoof · **C** aggressiveness · **D** vulnerability + trackability % |
 | **M5** | Advanced | localStorage temporal ID, emoji FP, VM WebGL strings |
+| **M7** | AdTech transparency | Privacy Sandbox probes (Topics API etc.), Meta Pixel / Google signals, live tracker request radar → transparency score + "what would they know about me" briefing |
+
+(No M6 in the code right now — the numbering just skips it.)
+
+**Fuzzy identity** — besides the hashed `stable_id`, the device components are compared one by one (`src/lib/modules/identity/fuzzy.ts`), so a GPU driver update that flips the canvas/WebGL hashes still reads as "same device", like a real tracker would see it.
 
 **History & compare** — last 10 full reports stay in `localStorage` only. Select two scans (e.g. stock Chrome vs Brave) and diff scores / `stable_id` / protection.
 
@@ -81,12 +86,14 @@ src/
   components/scanner/       # Report, history, compare
   hooks/useModuleScan.ts    # Pipeline + local history
   lib/
-    modules/                # M1–M5 pipeline
+    modules/                # M1–M5 + M7 pipeline (pipeline.ts)
       m1-network/           # IP extract, intel, geo↔tz
       m2-hardware/
       m3-software/
       m4-scoring/
       m5-advanced/
+      m7-adtech/            # Privacy Sandbox, Meta/Google signals, radar
+      identity/             # fuzzy component-level device matching
     history/                # localStorage + compare (pure)
     i18n/messages.ts        # EN / RU
 ```
