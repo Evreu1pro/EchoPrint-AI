@@ -4,7 +4,7 @@
 
 | Signal | Implementation |
 |--------|----------------|
-| JA3 / JA4 | Read `cf-ja3-hash`, `x-ja3-hash`, `x-ja4-hash` from reverse proxy. Real TLS hash requires Go/Rust/Caddy sidecar — see `deploy/ja3-sidecar.md` |
+| JA3 / JA4 | Read `cf-ja3-hash`, `x-ja3-hash`, `x-ja4-hash` from reverse proxy. Real TLS hash requires Go/Rust/Caddy sidecar — see [`docs/ja3-sidecar.md`](ja3-sidecar.md) |
 | Header order | Arrival order of HTTP headers → browser guess + signature |
 | IP intel | `ipwho.is` → ASN, org, hosting/proxy/mobile, VPN score, lat/lon |
 | WebRTC vs HTTP | Client sends ICE candidates; server compares to public IP |

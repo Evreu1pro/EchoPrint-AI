@@ -2,7 +2,7 @@
   "name": "echoprint-ai",
   "version": "3.0.0",
   "private": true,
-  "description": "M1–M5 browser fingerprint lab — network intel, stable_id, spoof/protection scores, local history",
+  "description": "M1–M5 + M7 browser fingerprint lab — network intel, stable_id, spoof/protection scores, AdTech transparency, local history",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
